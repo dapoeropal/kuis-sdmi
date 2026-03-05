@@ -57,7 +57,8 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
-    const defaultApiKey = ""; // Kosongkan untuk menggunakan inject dari Canvas
+    // WAJIB bernama "apiKey" agar otomatis disuntikkan akses gratis saat di Canvas
+    const apiKey = ""; 
 
     function base64ToArrayBuffer(base64) {
         const binaryString = window.atob(base64);
@@ -111,7 +112,6 @@
       const [theme, setTheme] = useState('light'); 
       const [gameState, setGameState] = useState('config'); 
       
-      // State Baru untuk Kunci Akses Manual
       const [manualKey, setManualKey] = useState("");
 
       const [config, setConfig] = useState({ 
@@ -181,7 +181,7 @@
       const textSub = isDark ? "text-gray-300" : "text-gray-600";
       const inputBg = isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-200 text-gray-700";
 
-      const activeKey = manualKey.trim() !== "" ? manualKey.trim() : defaultApiKey;
+      const activeKey = manualKey.trim() !== "" ? manualKey.trim() : apiKey;
 
       const currentQ = questions.length > 0 ? questions[currentQuestionIndex] : null;
       const isAnswered = selectedOption !== null;
@@ -258,12 +258,30 @@
       const stopSpeaking = () => {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
+        window.speechSynthesis.cancel(); // Matikan juga suara cadangan jika ada
         setIsSpeaking(false);
+      };
+
+      const fallbackTTS = () => {
+          if (!currentQ) return;
+          window.speechSynthesis.cancel(); // Pastikan bersih sebelum bicara
+          setIsSpeaking(true);
+          
+          let cleanQ = currentQ.question.replace(/[_]/g, 'titik titik'); 
+          const textToRead = `${cleanQ}. A. ${currentQ.options[0]}. B. ${currentQ.options[1]}. C. ${currentQ.options[2]}. D. ${currentQ.options[3]}.`;
+          
+          const utterance = new SpeechSynthesisUtterance(textToRead);
+          utterance.lang = 'id-ID';
+          utterance.rate = 0.9;
+          utterance.onend = () => setIsSpeaking(false);
+          utterance.onerror = () => setIsSpeaking(false);
+          
+          window.speechSynthesis.speak(utterance);
       };
 
       const preloadCurrentQuestionAudio = async () => {
           if (!currentQ) return;
-          if (!activeKey.trim()) return; // Jangan preload kalau API key kosong
+          if (!activeKey.trim()) return; // Skip preload jika tidak ada API key
           
           setIsTtsLoading(true);
           
@@ -310,7 +328,7 @@
               });
 
               if (!res.ok) {
-                  throw new Error(`Gagal preload suara (Status: ${res.status}). Pastikan API Key valid.`);
+                  throw new Error(`Gagal preload suara (Status: ${res.status}).`);
               }
 
               const data = await res.json();
@@ -335,7 +353,7 @@
               if (err.name === 'AbortError') {
                   console.log("Fetch suara dibatalkan.");
               } else {
-                  console.warn("Preload audio gagal:", err);
+                  console.warn("Preload audio gagal (Mungkin karena mode GitHub Pages). Suara cadangan siap digunakan.", err);
                   setIsTtsLoading(false);
               }
           }
@@ -344,24 +362,19 @@
       const playPreloadedAudio = () => {
           if (isSpeaking) return;
           
-          if (!activeKey.trim()) {
-              alert("Oops! Kamu belum memasukkan API Key di halaman awal. Suara tidak bisa diputar.");
-              return;
+          // JIKA ADA FILE SUARA AI PREMIUM YANG SUDAH JADI, PUTAR
+          if (preloadedAudioUrl) {
+              audioRef.current.src = preloadedAudioUrl;
+              audioRef.current.play().then(() => {
+                  setIsSpeaking(true);
+              }).catch(e => {
+                  console.error("Gagal memutar audio, mengalihkan ke suara cadangan:", e);
+                  fallbackTTS();
+              });
+          } else {
+              // JIKA GAGAL DIMUAT ATAU API KEY KOSONG (Di GitHub), GUNAKAN SUARA CADANGAN DARI HP
+              fallbackTTS();
           }
-
-          if (!preloadedAudioUrl) {
-             alert("Sabar Bolo, suara sedang disiapkan. Pastikan koneksi lancar!");
-             return;
-          }
-
-          audioRef.current.src = preloadedAudioUrl;
-          
-          audioRef.current.play().then(() => {
-              setIsSpeaking(true);
-          }).catch(e => {
-              console.error("Gagal putar suara:", e);
-              setIsSpeaking(false);
-          });
       };
 
       const playSoundEffect = (isCorrect) => {
@@ -522,8 +535,8 @@
                 });
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));
-                    if (res.status === 400) {
-                         throw new Error("API Key yang kamu masukkan sepertinya tidak valid. Coba periksa kembali penulisannya.");
+                    if (res.status === 400 || res.status === 401 || res.status === 403) {
+                         throw new Error("Akses Ditolak (Error 401). Pastikan API Key diisi dengan benar jika main di luar Canvas, atau muat ulang (refresh) tab ini jika dimainkan di dalam Canvas.");
                     }
                     throw new Error(err?.error?.message || `Gagal menghubungi server (Status: ${res.status})`);
                 }
@@ -531,7 +544,7 @@
                 break; 
             } catch (e) {
                 lastErrorMsg = e.message;
-                if (lastErrorMsg.includes("tidak valid")) break;
+                if (lastErrorMsg.includes("Akses Ditolak") || lastErrorMsg.includes("is not found")) break;
                 
                 attempt++;
                 if (attempt < 5) {
@@ -700,7 +713,6 @@
         </div>
       );
 
-      // Hanya me-render satu tampilan yang sesuai dengan gameState
       if (gameState === 'config') {
         return (
           <div className={`min-h-screen ${bgMain} flex flex-col items-center justify-center p-3 md:p-6 pt-20 md:pt-24 pb-10 font-sans transition-colors duration-500`}>
@@ -791,7 +803,7 @@
                       className={`w-full p-3 rounded-xl font-mono text-xs md:text-sm outline-none border transition-all ${inputBg}`}
                     />
                     <p className={`text-[10px] md:text-xs mt-2 ${isDark ? 'text-orange-300' : 'text-orange-700'}`}>
-                      *Wajib diisi karena file HTML ini dibuka di luar web AI Studio. Dapatkan kuncinya gratis dari Google.
+                      *Wajib diisi jika file ini dipublikasikan di luar AI Studio (seperti di GitHub Pages). Dapatkan kuncinya gratis dari Google.
                     </p>
                   </div>
                 </div>
@@ -839,7 +851,7 @@
         );
       }
 
-      // LOADING SCREEN YANG DIPERBAIKI (Animasi pas di tengah)
+      // LOADING SCREEN YANG DIPERBAIKI (Animasi pas presisi di tengah menggunakan SVG murni)
       if (gameState === 'loading') {
         return (
           <div className={`min-h-screen flex flex-col items-center justify-center p-4 overflow-hidden relative ${isDark ? 'bg-slate-900 text-white' : 'bg-indigo-500 text-white'}`}>
@@ -853,15 +865,13 @@
             <div className="z-10 w-full max-w-[90%] md:max-w-md text-center flex flex-col items-center backdrop-blur-md bg-black/30 px-6 py-10 md:py-12 rounded-[2rem] md:rounded-[3rem] border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.3)] mx-auto relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-white/10 to-transparent pointer-events-none"></div>
               
-              <div className="relative w-28 h-28 md:w-36 md:h-36 mb-6 md:mb-8 mx-auto">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <i className="fas fa-circle-notch fa-spin text-white/40 text-[90px] md:text-[120px] m-0 p-0 leading-none"></i>
-                </div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-[75%] h-[75%] border-[3px] md:border-4 border-dashed border-yellow-400/60 rounded-full animate-[spin_4s_linear_infinite_reverse]"></div>
-                </div>
-                <div className="absolute inset-0 flex items-center justify-center z-10">
-                  <div className={`text-4xl md:text-5xl font-black drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] ${countdown <= 5 ? 'text-red-400 animate-ping' : 'text-yellow-400 animate-pulse'}`}>{countdown}</div>
+              <div className="relative w-28 h-28 md:w-36 md:h-36 mb-6 md:mb-8 mx-auto flex items-center justify-center">
+                <svg className="absolute inset-0 w-full h-full text-white/30 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+                <div className="absolute w-[75%] h-[75%] border-[3px] md:border-4 border-dashed border-yellow-400/60 rounded-full animate-[spin_4s_linear_infinite_reverse]"></div>
+                <div className={`absolute text-4xl md:text-5xl font-black z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] ${countdown <= 5 ? 'text-red-400 animate-ping' : 'text-yellow-400 animate-pulse'}`}>
+                  {countdown}
                 </div>
               </div>
               
