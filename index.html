@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kuis Cerdas Anak SD - Kurikulum Merdeka</title>
+  
+  <!-- Memanggil Tailwind CSS untuk Desain -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Memanggil FontAwesome untuk Ikon -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Memanggil React dan ReactDOM untuk Logika Interaktif -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- Memanggil Babel agar browser mengerti bahasa JSX (React) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    @keyframes flyStraightUp {
+      0% { transform: translateY(110vh); opacity: 1; }
+      100% { transform: translateY(-30vh); opacity: 1; }
+    }
+    .rocket-wrapper {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none; overflow: hidden; z-index: 0;
+    }
+    .rocket-up-1 {
+      position: absolute; left: 50%; margin-left: -60px;
+      animation: flyStraightUp 2.5s cubic-bezier(0.6, -0.28, 0.735, 0.045) infinite;
+    }
+    .rocket-up-2 {
+      position: absolute; left: 15%; margin-left: -40px;
+      animation: flyStraightUp 3s cubic-bezier(0.6, -0.28, 0.735, 0.045) infinite;
+      animation-delay: 0.8s; opacity: 0.7;
+    }
+    .rocket-up-3 {
+      position: absolute; left: 85%; margin-left: -40px;
+      animation: flyStraightUp 2.8s cubic-bezier(0.6, -0.28, 0.735, 0.045) infinite;
+      animation-delay: 1.5s; opacity: 0.8;
+    }
+    /* Animasi untuk modal chat */
+    @keyframes slideUp {
+      from { transform: translateY(100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .chat-modal-enter {
+      animation: slideUp 0.3s ease-out forwards;
+    }
+  </style>
+</head>
+<body class="transition-colors duration-500">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    function base64ToArrayBuffer(base64) {
+        const binaryString = window.atob(base64);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
+    }
+
+    function pcmToWav(pcmData, sampleRate) {
+        const numChannels = 1;
+        const bytesPerSample = 2;
+        const blockAlign = numChannels * bytesPerSample;
+        const byteRate = sampleRate * blockAlign;
+        const dataSize = pcmData.byteLength;
+
+        const buffer = new ArrayBuffer(44 + dataSize);
+        const view = new DataView(buffer);
+
+        const writeString = (view, offset, string) => {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        };
+
+        writeString(view, 0, 'RIFF');
+        view.setUint32(4, 36 + dataSize, true);
+        writeString(view, 8, 'WAVE');
+        writeString(view, 12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, numChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, byteRate, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, bytesPerSample * 8, true);
+        writeString(view, 36, 'data');
+        view.setUint32(40, dataSize, true);
+
+        const pcmArray = new Uint8Array(pcmData);
+        const outArray = new Uint8Array(buffer, 44);
+        outArray.set(pcmArray);
+
+        return buffer;
+    }
+
+    function App() {
+      // --- STATE UTAMA ---
+      const [theme, setTheme] = useState('light'); 
+      const [gameState, setGameState] = useState('config'); 
+      
+      // State Baru untuk Kunci Akses Manual
+      const [manualKey, setManualKey] = useState("");
+
+      const [config, setConfig] = useState({ 
+        grade: '1', 
+        term: 'Tengah Semester 2', 
+        subject: 'Matematika',
+        level: 'Campuran',
+        questionCount: 10,
+        voice: 'Puck', 
+        visualMode: false,
+        specialNote: "" 
+      });
+
+      const [uploadedFiles, setUploadedFiles] = useState([]);
+      const [questions, setQuestions] = useState([]);
+      const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+      const [score, setScore] = useState(0);
+      const [selectedOption, setSelectedOption] = useState(null);
+      
+      const [loadingText, setLoadingText] = useState("Menyiapkan misi belajarmu...");
+      const [countdown, setCountdown] = useState(25); 
+      const [errorMessage, setErrorMessage] = useState("");
+      const [feedbackMessage, setFeedbackMessage] = useState("");
+      
+      // State Audio TTS
+      const [isSpeaking, setIsSpeaking] = useState(false);
+      const [isTtsLoading, setIsTtsLoading] = useState(false);
+      const [preloadedAudioUrl, setPreloadedAudioUrl] = useState(null);
+      
+      // State Tanya Guru AI
+      const [isChatOpen, setIsChatOpen] = useState(false);
+      const [chatMessages, setChatMessages] = useState([]);
+      const [chatInput, setChatInput] = useState("");
+      const [isChatLoading, setIsChatLoading] = useState(false);
+
+      const audioRef = useRef(new Audio());
+      const abortControllerRef = useRef(null); 
+      const fileInputRef = useRef(null);
+      const chatEndRef = useRef(null);
+
+      const grades = ['1', '2', '3', '4', '5', '6'];
+      const terms = ['Tengah Semester 1', 'Semester 1', 'Tengah Semester 2', 'Semester 2'];
+      const levels = ['Campuran', 'Mudah', 'Sedang', 'Sulit'];
+      const questionCounts = [10, 15, 20, 25, 30, 40, 50];
+      
+      const voices = [
+        { id: 'Puck', name: '🤖 Robot Pintar' },
+        { id: 'Kore', name: '👧 Kakak Ceria' },
+        { id: 'Aoede', name: '🧚‍♀️ Ibu Peri' },
+        { id: 'Fenrir', name: '🐻 Paman Beruang' }
+      ];
+      
+      const subjects = [
+        'Bahasa Inggris', 'Kemuhammadiyahan (KMD)', "Al Qur'an", 'Seni Budaya', 
+        'Bahasa Jawa', "Baca Tulis Al-Qur'an (BTA)", 'Sejarah Kebudayaan Islam (SKI)', 'Matematika', 
+        'Aqidah', 'Bahasa Indonesia', 'Fiqih', 'Bahasa Arab', 
+        'PJOK', 'Pendidikan Pancasila', 'Coding', 'IPAS'
+      ];
+      
+      const praiseWords = ["Hebat Banget! 🌟", "Kamu Jenius! 🧠", "Luar Biasa! 🎉", "Tepat Sekali! 🏆", "Wah, Keren! ✨", "Pintar Sekali! 🏅"];
+      const encourageWords = ["Hampir Benar! 😅", "Jangan Menyerah! 💪", "Ayo Coba Lagi! 🚀", "Tetap Semangat! ❤️", "Belajar Lagi Yuk! 💡", "Sedikit Lagi Tepat! 🎯"];
+
+      const isDark = theme === 'dark';
+      const bgMain = isDark ? "bg-slate-900" : "bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100";
+      const cardBg = isDark ? "bg-slate-800 border-slate-600" : "bg-white/80 backdrop-blur-xl border-white";
+      const textMain = isDark ? "text-white" : "text-gray-800";
+      const textSub = isDark ? "text-gray-300" : "text-gray-600";
+      const inputBg = isDark ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-gray-200 text-gray-700";
+
+      const currentQ = questions.length > 0 ? questions[currentQuestionIndex] : null;
+      const isAnswered = selectedOption !== null;
+      const isCorrectAnswer = isAnswered && currentQ && selectedOption === currentQ.correctAnswerIndex;
+      
+      const levelColors = { 
+        'Mudah': isDark ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-700', 
+        'Sedang': isDark ? 'bg-yellow-900 text-yellow-300' : 'bg-yellow-100 text-yellow-700', 
+        'Sulit': isDark ? 'bg-red-900 text-red-300' : 'bg-rose-100 text-rose-700'
+      };
+
+      useEffect(() => {
+        if (theme === 'dark') document.body.classList.add('bg-slate-900');
+        else document.body.classList.remove('bg-slate-900');
+      }, [theme]);
+
+      useEffect(() => {
+        if (gameState === 'loading') {
+          setCountdown(25); 
+          const timerInterval = setInterval(() => {
+            setCountdown((prev) => (prev <= 1 ? 1 : prev - 1)); 
+          }, 1000);
+          const texts = [
+            "Memanggil pesawat luar angkasa...",
+            uploadedFiles.length > 0 ? "Membaca dokumen materimu..." : "Mencari materi kurikulum terbaru...",
+            config.specialNote ? "Membaca pesan khusus darimu..." : "Meracik soal-soal seru...",
+            "Mengacak letak jawaban...",
+            config.grade === '1' ? "Menyiapkan asisten suara AI..." : "Menyiapkan lembar ujian...",
+            "Hampir siap, meluncurrrr! 🚀"
+          ];
+          let i = 0;
+          const textInterval = setInterval(() => {
+            i = (i + 1) % texts.length;
+            setLoadingText(texts[i]);
+          }, 3000);
+          return () => { clearInterval(timerInterval); clearInterval(textInterval); };
+        }
+      }, [gameState, uploadedFiles.length, config.specialNote, config.grade]);
+
+      useEffect(() => {
+        if (isChatOpen && chatEndRef.current) {
+          chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+        }
+      }, [chatMessages, isChatOpen]);
+
+      useEffect(() => {
+        if (gameState === 'playing' && questions.length > 0 && selectedOption === null && config.grade === '1' && !isChatOpen) {
+            preloadCurrentQuestionAudio();
+        }
+        stopSpeaking();
+      }, [currentQuestionIndex, gameState, questions, config.voice, config.grade, isChatOpen]);
+
+      useEffect(() => {
+          const audioEl = audioRef.current;
+          const handleEnded = () => setIsSpeaking(false);
+          audioEl.addEventListener('ended', handleEnded);
+          return () => audioEl.removeEventListener('ended', handleEnded);
+      }, []);
+
+      const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
+
+      const backToHome = () => {
+        stopSpeaking();
+        setGameState('config');
+        setQuestions([]);
+        setCurrentQuestionIndex(0);
+        setScore(0);
+        setSelectedOption(null);
+        setPreloadedAudioUrl(null);
+        setIsChatOpen(false);
+        setChatMessages([]);
+      };
+
+      const stopSpeaking = () => {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        setIsSpeaking(false);
+      };
+
+      const preloadCurrentQuestionAudio = async () => {
+          if (!currentQ) return;
+          if (!manualKey.trim()) return; // Jangan preload kalau API key kosong
+          
+          setIsTtsLoading(true);
+          
+          setPreloadedAudioUrl(prevUrl => {
+              if (prevUrl) URL.revokeObjectURL(prevUrl);
+              return null;
+          });
+
+          if (abortControllerRef.current) {
+              abortControllerRef.current.abort();
+          }
+          abortControllerRef.current = new AbortController();
+          const signal = abortControllerRef.current.signal;
+
+          try {
+              let cleanQ = currentQ.question.replace(/[_]/g, 'titik titik'); 
+              
+              let voiceActingPrompt = "";
+              if (config.voice === 'Fenrir') voiceActingPrompt = "Bacakan dengan suara paman beruang yang lucu, ramah, dan bersemangat dengan tempo normal: ";
+              else if (config.voice === 'Puck') voiceActingPrompt = "Bacakan dengan suara robot pintar yang ceria dan seru dengan tempo normal: ";
+              else if (config.voice === 'Kore') voiceActingPrompt = "Bacakan dengan suara kakak perempuan yang ceria, jelas, dan penuh semangat dengan tempo normal: ";
+              else voiceActingPrompt = "Bacakan dengan suara ibu peri yang lembut tapi ceria dan bersemangat dengan tempo normal: ";
+
+              const textToRead = `${voiceActingPrompt} ${cleanQ}. A. ${currentQ.options[0]}. B. ${currentQ.options[1]}. C. ${currentQ.options[2]}. D. ${currentQ.options[3]}.`;
+
+              const payload = {
+                contents: [{ parts: [{ text: textToRead }] }],
+                generationConfig: {
+                  responseModalities: ["AUDIO"],
+                  speechConfig: {
+                    voiceConfig: { prebuiltVoiceConfig: { voiceName: config.voice } } 
+                  }
+                },
+                model: "gemini-2.5-flash-preview-tts"
+              };
+
+              const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${manualKey.trim()}`;
+              
+              const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                signal: signal
+              });
+
+              if (!res.ok) {
+                  throw new Error(`Gagal preload suara (Status: ${res.status}). Pastikan API Key valid.`);
+              }
+
+              const data = await res.json();
+              const audioData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+
+              if (audioData && audioData.data) {
+                const sampleRateMatch = audioData.mimeType.match(/rate=(\d+)/);
+                const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 24000;
+                
+                const pcmBuffer = base64ToArrayBuffer(audioData.data);
+                const wavBuffer = pcmToWav(pcmBuffer, sampleRate);
+                
+                const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+                const audioUrl = URL.createObjectURL(blob);
+
+                setPreloadedAudioUrl(audioUrl);
+                setIsTtsLoading(false);
+              } else {
+                 throw new Error("Data suara kosong dari server.");
+              }
+          } catch (err) {
+              if (err.name === 'AbortError') {
+                  console.log("Fetch suara dibatalkan.");
+              } else {
+                  console.warn("Preload audio gagal:", err);
+                  setIsTtsLoading(false);
+              }
+          }
+      };
+
+      const playPreloadedAudio = () => {
+          if (isSpeaking) return;
+          
+          if (!manualKey.trim()) {
+              alert("Oops! Kamu belum memasukkan API Key di halaman awal. Suara tidak bisa diputar.");
+              return;
+          }
+
+          if (!preloadedAudioUrl) {
+             alert("Sabar Bolo, suara sedang disiapkan. Pastikan koneksi lancar!");
+             return;
+          }
+
+          audioRef.current.src = preloadedAudioUrl;
+          
+          audioRef.current.play().then(() => {
+              setIsSpeaking(true);
+          }).catch(e => {
+              console.error("Gagal putar suara:", e);
+              setIsSpeaking(false);
+          });
+      };
+
+      const playSoundEffect = (isCorrect) => {
+        try {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          const ctx = new AudioContext();
+          if (isCorrect) {
+            [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.type = 'sine';
+              osc.frequency.value = freq;
+              const startTime = ctx.currentTime + (i * 0.1);
+              gain.gain.setValueAtTime(0, startTime);
+              gain.gain.linearRampToValueAtTime(0.1, startTime + 0.02);
+              gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.15);
+              osc.start(startTime);
+              osc.stop(startTime + 0.15);
+            });
+          } else {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(300, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.4);
+            gain.gain.setValueAtTime(0, ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.4);
+          }
+        } catch (e) {
+          console.log("Efek suara diblokir browser.");
+        }
+      };
+
+      const handleFileUpload = (e) => {
+        const files = Array.from(e.target.files);
+        if (!files.length) return;
+        if (files.length + uploadedFiles.length > 5) {
+          alert("Maksimal 5 file saja ya Bolo!");
+          return;
+        }
+        files.forEach(file => {
+          if (file.size > 5 * 1024 * 1024) {
+            alert(`Ukuran file ${file.name} terlalu besar! Maksimal 5MB.`);
+            return;
+          }
+          const isPdf = file.type === 'application/pdf';
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64String = reader.result.split(',')[1];
+            setUploadedFiles(prev => [...prev, { name: file.name, mimeType: file.type, data: base64String, previewUrl: isPdf ? null : reader.result, isPdf: isPdf }]);
+          };
+          reader.readAsDataURL(file);
+        });
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      };
+
+      const removeFile = (indexToRemove) => {
+        setUploadedFiles(prev => prev.filter((_, index) => index !== indexToRemove));
+      };
+
+      const fetchQuestions = async () => {
+        if (!manualKey.trim()) {
+            alert("Halo Bolo! Jangan lupa masukkan API Key Gemini kamu dulu di kolom yang tersedia sebelum memulai ya!");
+            return;
+        }
+
+        setGameState('loading');
+        setErrorMessage("");
+
+        const targetCount = config.questionCount;
+        const targetLevel = config.level;
+        
+        let levelPrompt = targetLevel === 'Campuran' 
+            ? "Variasikan tingkat kesulitan (Mudah, Sedang, Sulit)" 
+            : `Semua soal harus memiliki tingkat kesulitan ${targetLevel.toUpperCase()}`;
+
+        let visualPrompt = config.visualMode 
+            ? "MODE VISUAL AKTIF: Gunakan EMOJI, IKON, atau SUSUNAN TEKS KREATIF untuk merepresentasikan soal (misalnya: 🍎 + 🍎 = ?)." 
+            : "";
+
+        let notePrompt = config.specialNote.trim() !== "" 
+            ? `INSTRUKSI KHUSUS DARI PENGGUNA (SANGAT PENTING): "${config.specialNote}".` 
+            : "";
+
+        const promptText = `Buat ${targetCount} soal pilihan ganda untuk anak SD/MI Kelas ${config.grade} ujian ${config.term} mata pelajaran ${config.subject}.
+        Tingkat Kesulitan: ${levelPrompt}.
+        ${visualPrompt}
+        
+        ${uploadedFiles.length > 0
+          ? "SANGAT PENTING: Gunakan informasi dari GAMBAR/DOKUMEN PDF YANG DILAMPIRKAN sebagai acuan utama pembuatan soal." 
+          : "Sumber: Kurikulum Merdeka / Kemenag terbaru Indonesia."}
+
+        ${notePrompt}
+
+        ATURAN MUTLAK:
+        - Output WAJIB berupa JSON murni.
+        - Sediakan tepat 4 Pilihan Jawaban (A, B, C, D) dalam array.
+        - Bahasa ramah anak, ceria.
+        - Penjelasan singkat & edukatif.`;
+
+        const parts = [{ text: promptText }];
+        uploadedFiles.forEach(file => {
+          parts.push({ inlineData: { mimeType: file.mimeType, data: file.data } });
+        });
+
+        const payload = {
+          contents: [{ parts: parts }],
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "OBJECT",
+              properties: {
+                questions: {
+                  type: "ARRAY",
+                  items: {
+                    type: "OBJECT",
+                    properties: {
+                      question: { type: "STRING" },
+                      options: { type: "ARRAY", items: { type: "STRING" } },
+                      correctAnswerIndex: { type: "INTEGER" },
+                      explanation: { type: "STRING" },
+                      level: { type: "STRING" },
+                      subject: { type: "STRING" }
+                    },
+                    required: ["question", "options", "correctAnswerIndex", "explanation", "level", "subject"]
+                  }
+                }
+              },
+              required: ["questions"]
+            }
+          },
+          systemInstruction: {
+            parts: [{ text: "Kamu adalah guru SD/MI Indonesia yang kreatif." }]
+          }
+        };
+        
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${manualKey.trim()}`;
+            
+        let responseData = null;
+        let lastErrorMsg = "";
+
+        const delays = [1000, 2000, 4000, 8000, 16000];
+        let attempt = 0;
+
+        while (attempt < 5) {
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    if (res.status === 400) {
+                         throw new Error("API Key yang kamu masukkan sepertinya tidak valid. Coba periksa kembali penulisannya.");
+                    }
+                    throw new Error(err?.error?.message || `Gagal menghubungi server (Status: ${res.status})`);
+                }
+                responseData = await res.json();
+                break; 
+            } catch (e) {
+                lastErrorMsg = e.message;
+                if (lastErrorMsg.includes("tidak valid")) break;
+                
+                attempt++;
+                if (attempt < 5) {
+                    await new Promise(r => setTimeout(r, delays[attempt - 1]));
+                }
+            }
+        }
+
+        try {
+          if (!responseData) throw new Error(lastErrorMsg || "Gagal membuat soal. Periksa koneksi internet Anda.");
+
+          const textResponse = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!textResponse) throw new Error("Balasan dari robot AI kosong.");
+          
+          let cleanJson = textResponse;
+          if (cleanJson.startsWith('```json')) cleanJson = cleanJson.substring(7);
+          else if (cleanJson.startsWith('```')) cleanJson = cleanJson.substring(3);
+          if (cleanJson.endsWith('```')) cleanJson = cleanJson.substring(0, cleanJson.length - 3);
+          
+          const parsedData = JSON.parse(cleanJson.trim());
+          
+          if (parsedData.questions && parsedData.questions.length > 0) {
+            
+            parsedData.questions.forEach(q => {
+                if(q.options && q.options.length > 0 && typeof q.correctAnswerIndex === 'number') {
+                    const correctAnswerText = q.options[q.correctAnswerIndex];
+                    for (let i = q.options.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [q.options[i], q.options[j]] = [q.options[j], q.options[i]];
+                    }
+                    q.correctAnswerIndex = q.options.indexOf(correctAnswerText);
+                }
+            });
+
+            setQuestions(parsedData.questions.sort(() => Math.random() - 0.5));
+            setCurrentQuestionIndex(0);
+            setScore(0);
+            setSelectedOption(null);
+            setGameState('playing');
+          } else {
+             throw new Error("Daftar soal kosong.");
+          }
+        } catch (error) {
+          setErrorMessage(error.message);
+          setGameState('error');
+        }
+      };
+
+      const handleOptionClick = (index) => {
+        if (selectedOption !== null || !currentQ) return;
+        
+        setSelectedOption(index);
+        stopSpeaking(); 
+        
+        const isCorrect = index === currentQ.correctAnswerIndex;
+        
+        playSoundEffect(isCorrect);
+        
+        const feedbackWord = isCorrect 
+            ? praiseWords[Math.floor(Math.random() * praiseWords.length)] 
+            : encourageWords[Math.floor(Math.random() * encourageWords.length)];
+            
+        setFeedbackMessage(feedbackWord);
+        
+        if (isCorrect) {
+          setScore(prev => prev + 1);
+        }
+      };
+
+      const handleNextQuestion = () => {
+        stopSpeaking();
+        if (currentQuestionIndex < questions.length - 1) {
+          setCurrentQuestionIndex(prev => prev + 1);
+          setSelectedOption(null);
+          setIsChatOpen(false);
+          setChatMessages([]);
+        } else {
+          setGameState('result');
+          setIsChatOpen(false);
+        }
+      };
+
+      const handleAskAI = async () => {
+        if (!chatInput.trim() || !currentQ || !manualKey.trim()) return;
+
+        const correctAnswerText = currentQ.options[currentQ.correctAnswerIndex];
+
+        const newMessages = [...chatMessages, { role: "user", text: chatInput }];
+        setChatMessages(newMessages);
+        setChatInput("");
+        setIsChatLoading(true);
+
+        const promptText = `
+        Saya adalah anak SD/MI Kelas ${config.grade}.
+        Saya sedang mengerjakan soal Kuis ${config.subject}.
+        Pertanyaannya: "${currentQ.question}"
+        Jawaban benar: "${correctAnswerText}".
+        Penjelasan: "${currentQ.explanation}"
+        
+        Pertanyaan saya ke kamu: "${chatInput}"
+
+        Tolong jawab pertanyaan saya dengan bahasa yang SANGAT ramah, sederhana, mudah dimengerti anak kelas ${config.grade}, dan gunakan analogi atau perumpamaan yang dekat dengan dunia anak-anak. Jangan panjang-panjang. Berikan pujian kecil.
+        `;
+
+        const payload = {
+          contents: [{ parts: [{ text: promptText }] }],
+          systemInstruction: {
+            parts: [{ text: "Kamu adalah guru SD/MI Indonesia yang ramah, penyayang, dan pandai menjelaskan hal rumit menjadi sederhana untuk anak-anak." }]
+          }
+        };
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${manualKey.trim()}`;
+
+        let attempt = 0;
+        let success = false;
+        let responseText = "";
+
+        while (attempt < 5 && !success) {
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) {
+                     const err = await res.json().catch(() => ({}));
+                     throw new Error(err?.error?.message || `Gagal menghubungi AI (Status: ${res.status})`);
+                }
+
+                const data = await res.json();
+                responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if(responseText) {
+                    success = true;
+                } else {
+                    throw new Error("Respons AI kosong.");
+                }
+
+            } catch (e) {
+                console.warn(`Gagal memanggil AI, percobaan ${attempt + 1}:`, e.message);
+                attempt++;
+                if (attempt < 5) {
+                    await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 1000)); 
+                }
+            }
+        }
+
+        if (success) {
+            setChatMessages(prev => [...prev, { role: "model", text: responseText }]);
+        } else {
+            setChatMessages(prev => [...prev, { role: "model", text: "Maaf ya nak, Guru AI sedang sibuk. Pastikan API Key sudah benar atau coba lagi nanti ya! 👓" }]);
+        }
+        setIsChatLoading(false);
+      };
+
+      const FloatingControls = () => (
+        <div className="fixed top-3 right-3 md:top-4 md:right-4 z-[100] flex gap-2 md:gap-3">
+          {gameState !== 'config' && (
+            <button onClick={backToHome} className={`p-2 md:p-3 w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-full shadow-[0_4px_10px_rgba(0,0,0,0.15)] border-2 transition-all hover:scale-110 active:scale-95 ${isDark ? 'bg-indigo-700 border-indigo-500 text-white' : 'bg-indigo-500 border-indigo-300 text-white'}`}>
+              <i className="fas fa-home text-lg md:text-xl"></i>
+            </button>
+          )}
+          <button onClick={toggleTheme} className={`p-2 md:p-3 w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-full shadow-[0_4px_10px_rgba(0,0,0,0.15)] border-2 transition-all hover:scale-110 active:scale-95 ${isDark ? 'bg-slate-700 border-slate-500 text-yellow-400' : 'bg-white border-orange-200 text-yellow-500'}`}>
+            {isDark ? <i className="fas fa-moon text-lg md:text-xl"></i> : <i className="fas fa-sun text-lg md:text-xl"></i>}
+          </button>
+        </div>
+      );
+
+      if (gameState === 'config') {
+        return (
+          <div className={`min-h-screen ${bgMain} flex flex-col items-center justify-center p-3 md:p-6 pt-20 md:pt-24 pb-10 font-sans transition-colors duration-500`}>
+            <FloatingControls />
+            <div className={`w-full max-w-md md:max-w-2xl lg:max-w-5xl ${cardBg} border-4 rounded-[2rem] md:rounded-[2.5rem] p-5 md:p-8 lg:p-10 shadow-2xl relative overflow-hidden transition-colors duration-500`}>
+              
+              <div className="flex justify-center mb-4 md:mb-6">
+                <div className={`w-16 h-16 md:w-20 md:h-20 flex items-center justify-center rounded-2xl md:rounded-3xl shadow-[0_6px_0_0_rgba(0,0,0,0.2)] transform -rotate-6 ${isDark ? 'bg-indigo-600' : 'bg-gradient-to-b from-yellow-300 to-yellow-500'}`}>
+                  <i className="fas fa-gamepad text-3xl md:text-4xl text-white drop-shadow-md"></i>
+                </div>
+              </div>
+              <h1 className={`text-3xl md:text-4xl lg:text-5xl font-black text-center mb-2 md:mb-3 tracking-tight ${textMain}`}>Kuis Petualangan</h1>
+              <p className={`text-center mb-6 md:mb-8 font-bold text-sm md:text-lg ${textSub}`}>Atur misimu, menangkan trofi!</p>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10">
+                <div className="space-y-4 md:space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+                    <div>
+                      <label className={`block font-bold mb-1 md:mb-2 text-sm md:text-base ${textMain}`}>Kelas</label>
+                      <select value={config.grade} onChange={(e) => setConfig({...config, grade: e.target.value})} className={`w-full p-3 rounded-xl font-bold outline-none border-2 shadow-sm text-sm md:text-base ${inputBg}`}>
+                        {grades.map(g => <option key={g} value={g}>Kelas {g} SD/MI</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={`block font-bold mb-1 md:mb-2 text-sm md:text-base ${textMain}`}>Periode</label>
+                      <select value={config.term} onChange={(e) => setConfig({...config, term: e.target.value})} className={`w-full p-3 rounded-xl font-bold outline-none border-2 shadow-sm text-sm md:text-base ${inputBg}`}>
+                        {terms.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+                    <div>
+                      <label className={`block font-bold mb-1 md:mb-2 text-sm md:text-base ${textMain}`}>Mata Pelajaran</label>
+                      <select value={config.subject} onChange={(e) => setConfig({...config, subject: e.target.value})} className={`w-full p-3 rounded-xl font-bold outline-none border-2 shadow-sm text-sm md:text-base ${inputBg}`}>
+                        {subjects.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={`block font-bold mb-1 md:mb-2 text-sm md:text-base ${textMain}`}>Level Awal</label>
+                      <select value={config.level} onChange={(e) => setConfig({...config, level: e.target.value})} className={`w-full p-3 rounded-xl font-bold outline-none border-2 shadow-sm text-sm md:text-base ${inputBg}`}>
+                        {levels.map(l => <option key={l} value={l}>{l === 'Campuran' ? 'Campuran' : `Level ${l}`}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className={`grid ${config.grade === '1' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'} gap-4 md:gap-5`}>
+                    <div>
+                      <label className={`block font-bold mb-1 md:mb-2 text-sm md:text-base ${textMain}`}>Jumlah Soal</label>
+                      <select value={config.questionCount} onChange={(e) => setConfig({...config, questionCount: parseInt(e.target.value)})} className={`w-full p-3 rounded-xl font-bold outline-none border-2 shadow-sm text-sm md:text-base ${inputBg}`}>
+                        {questionCounts.map(c => <option key={c} value={c}>{c} Soal</option>)}
+                      </select>
+                    </div>
+                    {/* Opsi Suara AI */}
+                    {config.grade === '1' && (
+                      <div>
+                        <label className={`block font-bold mb-1 md:mb-2 text-sm md:text-base ${textMain}`}>Suara AI</label>
+                        <select value={config.voice} onChange={(e) => setConfig({...config, voice: e.target.value})} className={`w-full p-3 rounded-xl font-bold outline-none border-2 shadow-sm text-sm md:text-base ${inputBg}`}>
+                          {voices.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className={`flex items-center justify-between p-3 md:p-4 rounded-xl border-2 cursor-pointer transition-all ${config.visualMode ? (isDark ? 'bg-emerald-900/30 border-emerald-500' : 'bg-emerald-50 border-emerald-300') : (isDark ? 'bg-slate-700 border-slate-600' : 'bg-gray-50 border-gray-200')}`} onClick={() => setConfig({...config, visualMode: !config.visualMode})}>
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg flex items-center justify-center ${config.visualMode ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-gray-500'}`}>
+                        <i className="fas fa-image text-lg md:text-xl"></i>
+                      </div>
+                      <div>
+                        <h3 className={`font-bold text-sm md:text-base ${textMain}`}>Mode Visual (Emoji)</h3>
+                        <p className={`text-[10px] md:text-xs ${textSub}`}>Soal menggunakan ikon & emoji</p>
+                      </div>
+                    </div>
+                    <div className={`w-5 h-5 md:w-6 md:h-6 rounded-full border-2 flex items-center justify-center shrink-0 ${config.visualMode ? 'bg-emerald-500 border-emerald-500' : 'border-gray-400'}`}>
+                      {config.visualMode && <i className="fas fa-check text-[10px] md:text-xs text-white"></i>}
+                    </div>
+                  </div>
+
+                  {/* KOLOM API KEY MUNCUL LANGSUNG */}
+                  <div className={`mt-2 p-3 md:p-4 rounded-xl border-2 ${isDark ? 'bg-slate-800 border-slate-600' : 'bg-orange-50 border-orange-200'}`}>
+                    <label className={`block font-bold mb-1 md:mb-2 text-sm md:text-base ${textMain}`}>
+                      <i className="fas fa-key text-orange-500 mr-2"></i>Kunci Akses (API Key Gemini)
+                    </label>
+                    <input 
+                      type="password" 
+                      value={manualKey}
+                      onChange={(e) => setManualKey(e.target.value)}
+                      placeholder="Tempel API Key kamu di sini..."
+                      className={`w-full p-3 rounded-xl font-mono text-xs md:text-sm outline-none border transition-all ${inputBg}`}
+                    />
+                    <p className={`text-[10px] md:text-xs mt-2 ${isDark ? 'text-orange-300' : 'text-orange-700'}`}>
+                      *Wajib diisi karena file HTML ini dibuka di luar web AI Studio. Dapatkan kuncinya gratis dari Google.
+                    </p>
+                  </div>
+                </div>
+
+                <div className={`border-2 border-dashed rounded-2xl md:rounded-3xl p-4 md:p-5 relative transition-all flex flex-col items-center h-full ${isDark ? 'border-slate-600 bg-slate-800/50' : 'border-indigo-200 bg-indigo-50/50'}`}>
+                  
+                  <div className="text-center w-full mb-3 md:mb-4">
+                    <input type="file" accept="image/*,application/pdf" multiple onChange={handleFileUpload} className="hidden" id="file-upload" ref={fileInputRef} />
+                    <label htmlFor="file-upload" className="cursor-pointer inline-flex items-center justify-center gap-2 bg-indigo-500 text-white font-bold text-sm md:text-base px-6 py-3 rounded-xl shadow-md hover:scale-105 transition-transform w-full sm:w-auto">
+                      <i className="fas fa-upload text-lg"></i> Upload File / Foto Materi
+                    </label>
+                    <p className={`text-[10px] md:text-xs mt-2 ${textSub}`}>Bisa tambah maks. 5 materi (Foto / PDF).</p>
+                  </div>
+
+                  {uploadedFiles.length > 0 && (
+                    <div className="w-full flex flex-wrap justify-center gap-2 md:gap-3 mb-3 md:mb-4 p-2 md:p-3 bg-white/10 rounded-xl border border-gray-300/30 max-h-32 md:max-h-40 overflow-y-auto">
+                      {uploadedFiles.map((file, idx) => (
+                        <div key={idx} className="relative group w-16 h-20 md:w-20 md:h-24 flex flex-col items-center">
+                          <div className={`w-12 h-12 md:w-16 md:h-16 rounded-lg border-2 shadow-sm overflow-hidden flex items-center justify-center ${isDark ? 'bg-slate-700 border-slate-500' : 'bg-white border-gray-300'}`}>
+                            {file.isPdf ? <i className="fas fa-file-pdf text-2xl md:text-3xl text-red-500"></i> : <img src={file.previewUrl} alt="Preview" className="w-full h-full object-cover" />}
+                          </div>
+                          <span className="text-[9px] md:text-[10px] w-full text-center truncate mt-1 font-semibold">{file.name}</span>
+                          <button onClick={() => removeFile(idx)} className="absolute -top-1 -right-1 md:-top-2 md:-right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shadow-md">
+                            <i className="fas fa-trash text-[10px]"></i>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className={`w-full p-2 md:p-3 rounded-xl md:rounded-2xl border mt-auto ${isDark ? 'bg-slate-700 border-slate-600' : 'bg-white border-indigo-100'}`}>
+                    <label className={`flex items-center gap-1 md:gap-2 text-xs md:text-sm font-bold mb-1 md:mb-2 ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
+                      <i className="fas fa-pen text-xs"></i> Pesan Khusus (Opsional)
+                    </label>
+                    <textarea value={config.specialNote} onChange={(e) => setConfig({...config, specialNote: e.target.value})} placeholder="Contoh: Fokus buat soal dari halaman 1 sampai 3 ya..." className={`w-full p-2 md:p-3 rounded-lg md:rounded-xl text-xs md:text-sm outline-none border transition-all resize-none h-16 md:h-20 ${isDark ? 'bg-slate-800 border-slate-600 text-white focus:border-indigo-500' : 'bg-gray-50 border-gray-200 text-gray-700 focus:border-indigo-400 focus:bg-white'}`} />
+                  </div>
+                </div>
+              </div>
+
+              <button onClick={() => fetchQuestions(false)} className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-black text-xl md:text-2xl py-3 md:py-4 rounded-xl md:rounded-2xl shadow-[0_4px_0_0_rgba(21,128,61,1)] md:shadow-[0_6px_0_0_rgba(21,128,61,1)] hover:translate-y-[2px] hover:shadow-[0_2px_0_0_rgba(21,128,61,1)] md:hover:shadow-[0_4px_0_0_rgba(21,128,61,1)] active:translate-y-[4px] md:active:translate-y-[6px] active:shadow-none transition-all flex items-center justify-center gap-2 mt-6 lg:mt-8">
+                Mulai Petualangan <i className="fas fa-arrow-right ml-2 text-lg"></i>
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      if (gameState === 'loading') {
+        return (
+          <div className={`min-h-screen flex flex-col items-center justify-center p-4 overflow-hidden relative ${isDark ? 'bg-slate-900 text-white' : 'bg-indigo-500 text-white'}`}>
+            <FloatingControls />
+            <div className="rocket-wrapper">
+              <div className="rocket-up-1"><i className="fas fa-rocket text-[80px] md:text-[120px] text-yellow-400 drop-shadow-[0_10px_20px_rgba(250,204,21,0.8)] -rotate-45"></i></div>
+              <div className="rocket-up-2"><i className="fas fa-rocket text-[60px] md:text-[80px] text-pink-400 drop-shadow-[0_10px_10px_rgba(244,114,182,0.8)] -rotate-45"></i></div>
+              <div className="rocket-up-3"><i className="fas fa-rocket text-[50px] md:text-[70px] text-sky-300 drop-shadow-[0_10px_10px_rgba(125,211,252,0.8)] -rotate-45"></i></div>
+            </div>
+            
+            <div className="z-10 w-full max-w-[90%] md:max-w-md text-center flex flex-col items-center backdrop-blur-md bg-black/30 px-6 py-10 md:py-12 rounded-[2rem] md:rounded-[3rem] border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.3)] mx-auto relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-white/10 to-transparent pointer-events-none"></div>
+              
+              <div className="relative w-28 h-28 md:w-36 md:h-36 flex items-center justify-center mb-6 md:mb-8 mx-auto">
+                <i className="fas fa-circle-notch fa-spin text-white/40 text-[90px] md:text-[120px] absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 m-0 p-0 leading-none flex items-center justify-center"></i>
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[75%] h-[75%] border-[3px] md:border-4 border-dashed border-yellow-400/60 rounded-full animate-[spin_4s_linear_infinite_reverse]"></div>
+                <div className={`text-4xl md:text-5xl font-black absolute z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] ${countdown <= 5 ? 'text-red-400 animate-ping' : 'text-yellow-400 animate-pulse'}`}>{countdown}</div>
+              </div>
+              
+              <h2 className="text-2xl md:text-3xl font-black mb-4 md:mb-5 text-white drop-shadow-md">Meluncur...</h2>
+              <div className="bg-white/20 px-5 md:px-6 py-3 rounded-xl border border-white/30 w-full">
+                 <p className="font-bold text-sm md:text-base text-white drop-shadow-sm truncate">{loadingText}</p>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (gameState === 'playing' && currentQ) {
+        return (
+          <div className={`min-h-screen p-3 md:p-6 lg:p-8 pt-20 md:pt-24 pb-10 flex flex-col items-center transition-colors duration-500 ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
+            <FloatingControls />
+            
+            <div className="w-full max-w-4xl lg:max-w-5xl flex justify-between items-center mb-4 md:mb-6 gap-2 md:gap-4">
+              <div className={`flex items-center gap-1 md:gap-2 px-3 md:px-4 py-1.5 md:py-2 rounded-lg md:rounded-xl border shadow-sm ${isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-100 text-gray-700'}`}>
+                <i className="fas fa-trophy text-lg md:text-xl text-yellow-500"></i>
+                <span className="font-black text-lg md:text-xl">{score}</span>
+              </div>
+              <div className="flex-1 h-3 md:h-4 bg-gray-200 rounded-full overflow-hidden relative">
+                <div className="h-full bg-green-500 transition-all duration-500" style={{ width: `${((currentQuestionIndex + 1) / questions.length) * 100}%` }} />
+              </div>
+              <div className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg md:rounded-xl font-black border text-sm md:text-base ${isDark ? 'bg-indigo-900 text-indigo-200 border-indigo-700' : 'bg-indigo-100 text-indigo-700 border-indigo-200'}`}>
+                {currentQuestionIndex + 1}/{questions.length}
+              </div>
+            </div>
+
+            {config.grade === '1' && (
+                <div className={`w-full max-w-4xl lg:max-w-5xl flex flex-col sm:flex-row items-center justify-between gap-3 p-3 md:p-4 mb-6 rounded-2xl border-2 shadow-sm transition-colors ${isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-white/80 border-gray-200 backdrop-blur-sm'}`}>
+                   <div className="flex items-center gap-2 w-full sm:w-auto">
+                     <span className={`text-xs md:text-sm font-bold opacity-70 ${textMain} flex items-center`}><i className="fas fa-smile mr-1"></i> Suara AI:</span>
+                     <select 
+                       value={config.voice} 
+                       onChange={(e) => setConfig({...config, voice: e.target.value})} 
+                       disabled={isAnswered || isSpeaking}
+                       className={`flex-1 sm:w-auto p-2 rounded-xl font-bold text-xs md:text-sm outline-none border-2 cursor-pointer shadow-inner ${inputBg} ${(isAnswered || isSpeaking) ? 'opacity-50' : ''}`}
+                     >
+                       {voices.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                     </select>
+                   </div>
+
+                   {isSpeaking ? (
+                     <button onClick={stopSpeaking} className="w-full sm:w-auto flex items-center justify-center gap-2 bg-red-500 text-white px-5 py-2.5 rounded-xl font-bold border-2 border-red-600 shadow-[0_4px_0_0_rgba(220,38,38,1)] active:translate-y-[4px] active:shadow-none hover:bg-red-400 transition-all text-sm md:text-base animate-pulse">
+                       <i className="fas fa-square"></i> Berhenti
+                     </button>
+                   ) : (
+                     <button onClick={playPreloadedAudio} disabled={isAnswered || isTtsLoading} className={`w-full sm:w-auto flex items-center justify-center gap-2 bg-sky-400 text-white px-6 py-2.5 rounded-xl font-black border-2 border-sky-500 shadow-[0_4px_0_0_rgba(2,132,199,1)] active:translate-y-[4px] active:shadow-none hover:bg-sky-300 transition-all text-sm md:text-base ${(isAnswered || isTtsLoading) ? 'opacity-50 cursor-not-allowed' : 'animate-bounce'}`}>
+                       {isTtsLoading ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-volume-up"></i>} 
+                       {isTtsLoading ? "Menyiapkan Suara..." : "Bacakan Soal"}
+                     </button>
+                   )}
+                </div>
+            )}
+
+            <div className={`w-full max-w-4xl lg:max-w-5xl rounded-[1.5rem] md:rounded-[2rem] p-5 md:p-8 lg:p-10 shadow-lg border-2 mb-6 md:mb-8 relative transition-colors ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
+              <div className="flex gap-2 mb-4 md:mb-6 flex-wrap">
+                <span className={`px-2 md:px-3 py-1 font-bold rounded-md md:rounded-lg border text-[10px] md:text-xs ${levelColors[currentQ.level] || (isDark ? 'bg-gray-700' : 'bg-gray-100')}`}>{currentQ.level}</span>
+                <span className={`px-2 md:px-3 py-1 font-bold rounded-md md:rounded-lg border text-[10px] md:text-xs ${isDark ? 'bg-indigo-900 text-indigo-200' : 'bg-indigo-100 text-indigo-700'}`}>📚 {config.subject.split(' (')[0]}</span>
+              </div>
+
+              <h2 className={`text-xl md:text-2xl lg:text-3xl font-black mb-6 md:mb-8 leading-relaxed md:leading-snug ${textMain}`}>{currentQ.question}</h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 lg:gap-5">
+                {currentQ.options.map((opt, idx) => {
+                  let btnClass = isDark ? "bg-slate-700 border-slate-600 text-slate-300" : "bg-white border-gray-200 text-gray-700";
+                  if (isAnswered) {
+                    if (idx === currentQ.correctAnswerIndex) btnClass = "bg-green-500 border-green-600 text-white ring-2 ring-green-300 scale-[1.01] z-10";
+                    else if (idx === selectedOption) btnClass = "bg-red-500 border-red-600 text-white opacity-90 scale-[0.98]";
+                    else btnClass = "opacity-40 pointer-events-none";
+                  }
+                  return (
+                    <button key={idx} disabled={isAnswered} onClick={() => handleOptionClick(idx)} className={`w-full text-left p-3 md:p-4 rounded-xl border-2 font-bold text-sm md:text-base lg:text-lg transition-all flex items-center justify-between shadow-[0_3px_0_0_rgba(0,0,0,0.1)] active:translate-y-[2px] active:shadow-none ${btnClass} hover:bg-indigo-50 hover:border-indigo-300`}>
+                      <span className="flex items-center gap-3 md:gap-4">
+                        <span className={`w-7 h-7 md:w-8 md:h-8 flex items-center justify-center rounded-lg text-xs md:text-sm font-black shrink-0 ${isAnswered && idx === currentQ.correctAnswerIndex ? 'bg-white text-green-600' : 'bg-black/10'}`}>{['A','B','C','D'][idx]}</span>
+                        <span>{opt}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Feedback & Explanation & Chat AI */}
+              {isAnswered && (
+                <div className={`mt-5 md:mt-6 p-4 md:p-5 rounded-xl md:rounded-2xl border-2 animate-fade-in-up relative ${isCorrectAnswer ? (isDark ? 'bg-green-900/30 border-green-700' : 'bg-green-50 border-green-200') : (isDark ? 'bg-orange-900/30 border-orange-700' : 'bg-orange-50 border-orange-200')}`}>
+                  <div className="flex flex-col md:flex-row gap-3 md:gap-4 pr-2">
+                    <div className="flex items-start gap-3">
+                      {isCorrectAnswer ? <i className="fas fa-smile text-green-500 shrink-0 animate-bounce text-3xl md:text-4xl mt-1"></i> : <i className="fas fa-lightbulb text-orange-500 shrink-0 text-3xl md:text-4xl mt-1"></i>}
+                      <div>
+                        <h3 className={`font-black text-lg md:text-xl mb-1 ${isCorrectAnswer ? 'text-green-500' : 'text-orange-500'}`}>{feedbackMessage}</h3>
+                        <p className={`font-medium text-xs md:text-sm ${textSub}`}>{currentQ.explanation}</p>
+                      </div>
+                    </div>
+
+                    {/* Tombol Tanya Guru AI - Hanya muncul jika jawaban salah */}
+                    {!isCorrectAnswer && (
+                       <button onClick={() => setIsChatOpen(true)} className={`mt-3 md:mt-0 md:ml-auto shrink-0 flex items-center justify-center gap-2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:scale-105 transition-transform text-xs md:text-sm`}>
+                         <i className="fas fa-magic"></i> Tanya Guru AI ✨
+                       </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {isAnswered && (
+              <div className="w-full max-w-4xl lg:max-w-5xl flex justify-end pb-10">
+                <button onClick={handleNextQuestion} className="bg-indigo-600 hover:bg-indigo-500 text-white font-black text-lg md:text-xl px-6 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl shadow-[0_4px_0_0_rgba(67,56,202,1)] hover:translate-y-[2px] active:translate-y-[4px] active:shadow-none transition-all flex items-center gap-2 animate-bounce">
+                  Lanjut <i className="fas fa-arrow-right ml-2"></i>
+                </button>
+              </div>
+            )}
+            
+            {/* Modal Chat "Tanya Guru AI" */}
+            {isChatOpen && (
+              <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
+                <div className={`chat-modal-enter w-full sm:max-w-md md:max-w-lg lg:max-w-xl h-[85vh] sm:h-[80vh] flex flex-col rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl border-t-4 sm:border-4 ${isDark ? 'bg-slate-800 border-indigo-500' : 'bg-white border-indigo-400'}`}>
+                  
+                  <div className={`p-4 flex items-center justify-between border-b ${isDark ? 'border-slate-700 bg-slate-800/90 rounded-t-[2rem]' : 'border-gray-100 bg-white/90 rounded-t-[2rem]'}`}>
+                     <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white shadow-inner">
+                           <i className="fas fa-robot text-xl"></i>
+                        </div>
+                        <div>
+                           <h3 className={`font-black text-base md:text-lg leading-tight ${isDark ? 'text-white' : 'text-gray-800'}`}>Guru AI ✨</h3>
+                           <p className={`text-[10px] md:text-xs font-medium ${isDark ? 'text-indigo-300' : 'text-indigo-500'}`}>Siap membantu menjelaskannya padamu!</p>
+                        </div>
+                     </div>
+                     <button onClick={() => setIsChatOpen(false)} className={`w-8 h-8 flex items-center justify-center rounded-full hover:bg-black/10 transition-colors ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>
+                        <i className="fas fa-times text-lg"></i>
+                     </button>
+                  </div>
+
+                  <div className={`flex-1 overflow-y-auto p-4 space-y-4 ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                     <div className="flex items-end gap-2">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                           <i className="fas fa-robot text-indigo-500 text-sm"></i>
+                        </div>
+                        <div className={`px-4 py-3 rounded-2xl rounded-bl-none max-w-[85%] text-sm shadow-sm ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-white text-gray-700 border border-gray-100'}`}>
+                           Halo! Jangan sedih kalau jawabannya belum tepat. Kamu mau tanya apa tentang soal ini? Kakak siap bantu jelaskan! 😊
+                        </div>
+                     </div>
+
+                     {chatMessages.map((msg, idx) => (
+                        <div key={idx} className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : ''}`}>
+                           {msg.role === 'model' && (
+                             <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                                <i className="fas fa-robot text-indigo-500 text-sm"></i>
+                             </div>
+                           )}
+                           <div className={`px-4 py-3 rounded-2xl max-w-[85%] text-sm shadow-sm ${
+                             msg.role === 'user' 
+                               ? 'bg-indigo-500 text-white rounded-br-none' 
+                               : isDark ? 'bg-slate-700 text-slate-200 rounded-bl-none' : 'bg-white text-gray-700 border border-gray-100 rounded-bl-none'
+                           }`}>
+                              {msg.text}
+                           </div>
+                        </div>
+                     ))}
+                     
+                     {isChatLoading && (
+                        <div className="flex items-end gap-2">
+                           <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                              <i className="fas fa-robot text-indigo-500 text-sm"></i>
+                           </div>
+                           <div className={`px-4 py-3 rounded-2xl rounded-bl-none max-w-[85%] text-sm shadow-sm flex gap-1 items-center ${isDark ? 'bg-slate-700' : 'bg-white border border-gray-100'}`}>
+                              <i className="fas fa-circle-notch fa-spin text-indigo-500 text-xs mr-2"></i> Mengetik...
+                           </div>
+                        </div>
+                     )}
+                     <div ref={chatEndRef} />
+                  </div>
+
+                  <div className={`p-3 sm:p-4 border-t ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
+                     <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAskAI()}
+                          placeholder="Ketik pertanyaanmu di sini..."
+                          disabled={isChatLoading}
+                          className={`flex-1 px-4 py-3 rounded-xl outline-none border transition-colors text-sm ${isDark ? 'bg-slate-700 border-slate-600 text-white focus:border-indigo-500' : 'bg-slate-50 border-gray-200 text-gray-800 focus:border-indigo-400 focus:bg-white'}`}
+                        />
+                        <button 
+                          onClick={handleAskAI}
+                          disabled={isChatLoading || !chatInput.trim()}
+                          className={`w-12 h-12 flex items-center justify-center rounded-xl font-bold shadow-md transition-all ${!chatInput.trim() || isChatLoading ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-indigo-500 text-white hover:bg-indigo-600 hover:scale-105 active:scale-95'}`}
+                        >
+                          <i className="fas fa-paper-plane"></i>
+                        </button>
+                     </div>
+                  </div>
+
+                </div>
+              </div>
+            )}
+
+          </div>
+        );
+      }
+
+      if (gameState === 'result') {
+        return (
+          <div className={`min-h-screen flex flex-col items-center justify-center p-4 pt-20 ${isDark ? 'bg-slate-900' : 'bg-gradient-to-br from-indigo-500 to-purple-600'}`}>
+            <FloatingControls />
+            <div className={`max-w-md w-full rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-8 text-center relative shadow-2xl ${isDark ? 'bg-slate-800 border-slate-600' : 'bg-white'}`}>
+              <i className="fas fa-trophy text-6xl md:text-7xl block mx-auto text-yellow-400 mb-4 animate-bounce"></i>
+              <h2 className={`text-2xl md:text-3xl font-black mb-2 ${isDark ? 'text-white' : 'text-gray-800'}`}>Misi Selesai!</h2>
+              <div className={`text-5xl md:text-6xl lg:text-7xl font-black mb-4 ${isDark ? 'text-green-400' : 'text-indigo-600'}`}>
+                {score}<span className="text-xl md:text-2xl text-gray-400">/{questions.length}</span>
+              </div>
+              <button onClick={backToHome} className="w-full font-bold py-3 md:py-4 rounded-xl md:rounded-2xl border-2 flex items-center justify-center gap-2 transition-all text-sm md:text-base bg-indigo-500 text-white shadow-[0_4px_0_0_rgba(67,56,202,1)]">
+                <i className="fas fa-sync-alt text-lg md:text-xl"></i> Main Dari Awal
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      if (gameState === 'error') {
+        return (
+          <div className={`min-h-screen flex flex-col items-center justify-center p-4 pt-20 ${isDark ? 'bg-slate-900 text-white' : 'bg-rose-50'}`}>
+            <FloatingControls />
+            <div className={`p-8 md:p-10 rounded-[2rem] shadow-2xl max-w-md w-full text-center border-2 ${isDark ? 'bg-slate-800 border-slate-600' : 'bg-white border-rose-100'}`}>
+              <div className="bg-rose-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fas fa-frown text-4xl text-rose-500"></i></div>
+              <h2 className="text-xl font-black mb-2">Ups, Ada yang salah!</h2>
+              <div className="p-4 rounded-xl text-left border bg-rose-50 border-rose-200 mb-6"><p className="font-mono text-xs text-rose-600">{errorMessage}</p></div>
+              <button onClick={backToHome} className="w-full bg-indigo-500 text-white font-bold py-3 rounded-xl shadow-[0_4px_0_0_rgba(67,56,202,1)]">Kembali ke Markas</button>
+            </div>
+          </div>
+        );
+      }
+      return null;
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
