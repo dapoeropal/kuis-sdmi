@@ -3,8 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kuis Cerdas Anak SD - Kurikulum Merdeka</title>
+
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="apple-touch-icon" href="icon-192.png">
+
+  <title>Kuis Cerdas Anak SD/ MI - Kurikulum Merdeka</title>
   
+
   <!-- Memanggil Tailwind CSS untuk Desain -->
   <script src="https://cdn.tailwindcss.com"></script>
   
@@ -1114,5 +1120,18 @@
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').then(registration => {
+          console.log('ServiceWorker PWA berhasil didaftarkan!', registration.scope);
+        }).catch(err => {
+          console.log('ServiceWorker PWA gagal didaftarkan: ', err);
+        });
+      });
+    }
+  </script>
+
 </body>
 </html>
