@@ -1,6 +1,6 @@
 {
-  "name": "Kuis Cerdas Anak SD",
-  "short_name": "Kuis SD",
+  "name": "Kuis Cerdas Anak SD/ MI",
+  "short_name": "Kuis Cerdas",
   "description": "Aplikasi belajar dan kuis cerdas untuk anak SD berbasis Kurikulum Merdeka",
   "start_url": "./index.html",
   "display": "standalone",
