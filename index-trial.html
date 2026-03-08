@@ -8,19 +8,19 @@
   <meta name="theme-color" content="#4f46e5">
   <link rel="apple-touch-icon" href="icon-192.png">
 
-  <title>Kuis Cerdas Anak SD/ MI - Kurikulum Merdeka</title>
+  <title>Kuis Cerdas Anak TK & SD - Kurikulum Merdeka</title>
   
-  <!-- Nimbali Tailwind CSS kagem Desain -->
+  <!-- Memanggil Tailwind CSS untuk Desain -->
   <script src="https://cdn.tailwindcss.com"></script>
   
-  <!-- Nimbali FontAwesome kagem Ikon -->
+  <!-- Memanggil FontAwesome untuk Ikon -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
-  <!-- Nimbali React lan ReactDOM kagem Logika Interaktif -->
+  <!-- Memanggil React dan ReactDOM untuk Logika Interaktif -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   
-  <!-- Nimbali Babel supados browser saged mahami basa JSX (React) -->
+  <!-- Memanggil Babel agar browser mengerti bahasa JSX (React) -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
@@ -46,7 +46,6 @@
       animation: flyStraightUp 2.8s cubic-bezier(0.6, -0.28, 0.735, 0.045) infinite;
       animation-delay: 1.5s; opacity: 0.8;
     }
-    /* Animasi untuk modal chat */
     @keyframes slideUp {
       from { transform: translateY(100%); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
@@ -128,13 +127,13 @@
       });
 
       const [config, setConfig] = useState({ 
-        grade: '1', 
+        grade: 'TK / PAUD', 
         term: 'Tengah Semester 2', 
-        subject: 'Matematika',
+        subject: 'Mengenal Angka & Berhitung',
         level: 'Campuran',
         questionCount: 10,
         voice: 'Puck', 
-        visualMode: false,
+        visualMode: true, // Otomatis mode visual untuk default TK
         specialNote: "" 
       });
 
@@ -180,24 +179,25 @@
       const activeKey = manualKey.trim() !== "" ? manualKey.trim() : apiKey;
       const currentQ = questions.length > 0 ? questions[currentQuestionIndex] : null;
       
-      // Mriksa punapa soal menika sampun dipunwangsuli saderengipun
       const isAnswered = answers[currentQuestionIndex] !== undefined;
       const selectedOption = isAnswered ? answers[currentQuestionIndex] : null;
       const isCorrectAnswer = isAnswered && currentQ && selectedOption === currentQ.correctAnswerIndex;
       const feedbackMessage = isAnswered ? feedbackMessages[currentQuestionIndex] : "";
       
+      // Menentukan apakah fitur suara AI (TTS) ditampilkan
+      const showVoiceFeature = ['TK / PAUD', '1', '2', '3'].includes(config.grade);
+
       const levelColors = { 
         'Mudah': isDark ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-700', 
         'Sedang': isDark ? 'bg-yellow-900 text-yellow-300' : 'bg-yellow-100 text-yellow-700', 
         'Sulit': isDark ? 'bg-red-900 text-red-300' : 'bg-rose-100 text-rose-700'
       };
 
-      const grades = ['1', '2', '3', '4', '5', '6'];
-      const terms = ['Tengah Semester 1', 'Semester 1', 'Tengah Semester 2', 'Semester 2'];
+      const grades = ['TK / PAUD', '1', '2', '3', '4', '5', '6'];
+      const terms = ['Semester 1', 'Tengah Semester 1', 'Semester 2', 'Tengah Semester 2', 'Latihan Biasa'];
       const levels = ['Campuran', 'Mudah', 'Sedang', 'Sulit'];
       const questionCounts = [10, 15, 20, 25, 30, 40, 50];
       
-      // OPSI SUARA DIGABUNG DALAM SATU LIST
       const voices = [
         { id: 'Puck', name: '🤖 Robot Pintar (Premium)' },
         { id: 'Kore', name: '👧 Kakak Ceria (Premium)' },
@@ -207,10 +207,11 @@
       ];
       
       const subjects = [
-        'Bahasa Inggris', 'Kemuhammadiyahan (KMD)', "Al Qur'an", 'Seni Budaya', 
-        'Bahasa Jawa', "Baca Tulis Al-Qur'an (BTA)", 'Sejarah Kebudayaan Islam (SKI)', 'Matematika', 
-        'Aqidah', 'Bahasa Indonesia', 'Fiqih', 'Bahasa Arab', 
-        'PJOK', 'Pendidikan Pancasila', 'Coding', 'IPAS'
+        'Mengenal Angka & Berhitung', 'Mengenal Huruf & Membaca', 'Mengenal Hewan & Tumbuhan', 'Mengenal Warna & Bentuk',
+        'Bahasa Indonesia', 'Matematika', 'Bahasa Inggris', 'Pendidikan Pancasila', 'IPAS',
+        'Kemuhammadiyahan (KMD)', "Al Qur'an", 'Seni Budaya', 'Bahasa Jawa', 
+        "Baca Tulis Al-Qur'an (BTA)", 'Sejarah Kebudayaan Islam (SKI)', 
+        'Aqidah', 'Fiqih', 'Bahasa Arab', 'PJOK', 'Coding'
       ];
       
       const praiseWords = ["Hebat Banget! 🌟", "Kamu Jenius! 🧠", "Luar Biasa! 🎉", "Tepat Sekali! 🏆", "Wah, Keren! ✨", "Pintar Sekali! 🏅"];
@@ -232,7 +233,7 @@
             uploadedFiles.length > 0 ? "Membaca dokumen materimu..." : "Mencari materi kurikulum terbaru...",
             config.specialNote ? "Membaca pesan khusus darimu..." : "Meracik soal-soal seru...",
             "Mengacak letak jawaban...",
-            config.grade === '1' ? "Menyiapkan asisten suara AI..." : "Menyiapkan lembar ujian...",
+            showVoiceFeature ? "Menyiapkan asisten suara AI..." : "Menyiapkan lembar ujian...",
             "Hampir siap, meluncurrrr! 🚀"
           ];
           let i = 0;
@@ -242,7 +243,7 @@
           }, 3000);
           return () => { clearInterval(timerInterval); clearInterval(textInterval); };
         }
-      }, [gameState, uploadedFiles.length, config.specialNote, config.grade]);
+      }, [gameState, uploadedFiles.length, config.specialNote, showVoiceFeature]);
 
       useEffect(() => {
         if (isChatOpen && chatEndRef.current) {
@@ -251,11 +252,11 @@
       }, [chatMessages, isChatOpen]);
 
       useEffect(() => {
-        if (gameState === 'playing' && questions.length > 0 && selectedOption === null && config.grade === '1' && !isChatOpen && config.voice !== 'local') {
+        if (gameState === 'playing' && questions.length > 0 && selectedOption === null && showVoiceFeature && !isChatOpen && config.voice !== 'local') {
             preloadCurrentQuestionAudio();
         }
         stopSpeaking();
-      }, [currentQuestionIndex, gameState, questions, config.voice, config.grade, isChatOpen]);
+      }, [currentQuestionIndex, gameState, questions, config.voice, showVoiceFeature, isChatOpen]);
 
       useEffect(() => {
           const audioEl = audioRef.current;
@@ -294,12 +295,38 @@
         return cleanedText;
       };
 
+      // FUNGSI FORMAT BOLD: Merubah **text** jadi tebal (bold) dan merapikan enter
+      const formatText = (text) => {
+        if (!text) return null;
+        const str = String(text);
+        const parts = str.split(/(\*\*.*?\*\*)/g);
+        
+        return parts.map((part, index) => {
+            if (part.startsWith('**') && part.endsWith('**')) {
+                return <strong key={index} className="font-bold text-indigo-600 dark:text-indigo-400">{part.substring(2, part.length - 2)}</strong>;
+            }
+            return (
+                <span key={index}>
+                    {part.split('\n').map((item, i, arr) => (
+                        <React.Fragment key={i}>
+                            {item}
+                            {i !== arr.length - 1 && <br />}
+                        </React.Fragment>
+                    ))}
+                </span>
+            );
+        });
+      };
+
       const fallbackTTS = () => {
           if (!currentQ) return;
           if (window.speechSynthesis) window.speechSynthesis.cancel(); 
           setIsSpeaking(true);
           
           let cleanQ = String(currentQ.question).replace(/[_]/g, 'titik titik'); 
+          // Hapus bintang markdown sebelum dibaca oleh sistem
+          cleanQ = cleanQ.replace(/\*\*/g, '');
+
           const textToRead = `${cleanQ}. A. ${cleanOptionText(currentQ.options[0])}. B. ${cleanOptionText(currentQ.options[1])}. C. ${cleanOptionText(currentQ.options[2])}. D. ${cleanOptionText(currentQ.options[3])}.`;
           
           const utterance = new SpeechSynthesisUtterance(textToRead);
@@ -312,9 +339,7 @@
       };
 
       const preloadCurrentQuestionAudio = async () => {
-          if (!currentQ) return;
-          if (config.voice === 'local') return; // Skip preload jika memilih suara HP lokal
-          if (!activeKey.trim()) return; 
+          if (!currentQ || !activeKey.trim() || config.voice === 'local') return; 
           
           setIsTtsLoading(true);
           
@@ -330,7 +355,7 @@
           const signal = abortControllerRef.current.signal;
 
           try {
-              let cleanQ = String(currentQ.question).replace(/[_]/g, 'titik titik'); 
+              let cleanQ = String(currentQ.question).replace(/[_]/g, 'titik titik').replace(/\*\*/g, ''); 
               
               let voiceActingPrompt = "";
               if (config.voice === 'Fenrir') voiceActingPrompt = "Bacakan dengan suara paman beruang yang lucu, ramah, dan bersemangat dengan tempo normal: ";
@@ -338,7 +363,7 @@
               else if (config.voice === 'Kore') voiceActingPrompt = "Bacakan dengan suara kakak perempuan yang ceria, jelas, dan penuh semangat dengan tempo normal: ";
               else voiceActingPrompt = "Bacakan dengan suara ibu peri yang lembut tapi ceria dan bersemangat dengan tempo normal: ";
 
-              const textToRead = `${voiceActingPrompt} ${cleanQ}. A. ${cleanOptionText(currentQ.options[0])}. B. ${cleanOptionText(currentQ.options[1])}. C. ${cleanOptionText(currentQ.options[2])}. D. ${cleanOptionText(currentQ.options[3])}.`;
+              const textToRead = `${voiceActingPrompt} ${cleanQ}. A. ${cleanOptionText(currentQ.options[0]).replace(/\*\*/g, '')}. B. ${cleanOptionText(currentQ.options[1]).replace(/\*\*/g, '')}. C. ${cleanOptionText(currentQ.options[2]).replace(/\*\*/g, '')}. D. ${cleanOptionText(currentQ.options[3]).replace(/\*\*/g, '')}.`;
 
               const payload = {
                 contents: [{ parts: [{ text: textToRead }] }],
@@ -492,22 +517,26 @@
 
         const targetCount = config.questionCount;
         const targetLevel = config.level;
+        const isTK = config.grade === 'TK / PAUD';
         
         let levelPrompt = targetLevel === 'Campuran' 
             ? "Variasikan tingkat kesulitan (Mudah, Sedang, Sulit)" 
             : `Semua soal harus memiliki tingkat kesulitan ${targetLevel.toUpperCase()}`;
 
         let visualPrompt = config.visualMode 
-            ? "MODE VISUAL AKTIF: Gunakan EMOJI, IKON, atau SUSUNAN TEKS KREATIF untuk merepresentasikan soal (misalnya: 🍎 + 🍎 = ?)." 
+            ? "MODE VISUAL AKTIF: Wajib gunakan EMOJI, IKON, atau SUSUNAN TEKS KREATIF untuk merepresentasikan soal (misalnya: 🍎 + 🍎 = ?)." 
             : "";
 
         let notePrompt = config.specialNote.trim() !== "" 
             ? `INSTRUKSI KHUSUS DARI PENGGUNA (SANGAT PENTING): "${config.specialNote}".` 
             : "";
 
-        const promptText = `Buat ${targetCount} soal pilihan ganda untuk anak SD/MI Kelas ${config.grade} ujian ${config.term} mata pelajaran ${config.subject}.
+        const tingkatSekolahStr = isTK ? 'TK / PAUD' : `SD/MI Kelas ${config.grade}`;
+
+        const promptText = `Buat ${targetCount} soal pilihan ganda untuk anak ${tingkatSekolahStr} ujian ${config.term} mata pelajaran ${config.subject}.
         Tingkat Kesulitan: ${levelPrompt}.
         ${visualPrompt}
+        ${isTK ? 'PENTING: Soal untuk anak TK/PAUD harus SANGAT SEDERHANA, gunakan banyak EMOJI, bahasa yang sangat ceria, dan berhubungan dengan kehidupan sehari-hari (hewan, buah, warna, menghitung benda).' : ''}
         
         ${uploadedFiles.length > 0
           ? "SANGAT PENTING: Gunakan informasi dari GAMBAR/DOKUMEN PDF YANG DILAMPIRKAN sebagai acuan utama pembuatan soal." 
@@ -518,10 +547,10 @@
         ATURAN MUTLAK:
         - Output WAJIB berupa JSON murni.
         - Format: { "questions": [{"question": "...", "options": ["...", "...", "...", "..."], "correctAnswerIndex": 0, "explanation": "...", "hint": "...", "level": "..."}] }
-        - Sediakan tepat 4 Pilihan Jawaban (A, B, C, D) dalam array. Pilihan jawaban ORA entuk diwiwiti nganggo huruf "A.", "B.", "C.", "D.". Cukup tulisake teks jawabane wae, amarga huruf kasebut wis disedhiyakake ing aplikasi.
-        - "hint" berisi 1 kalimat petunjuk/kisi-kisi rahasia untuk membantu anak menjawab tanpa memberikan jawaban langsung.
+        - Sediakan tepat 4 Pilihan Jawaban (A, B, C, D) dalam array. Pilihan jawaban ORA entuk diwiwiti nganggo huruf "A.", "B.", "C.", "D.". Cukup tulisake teks jawabane wae.
+        - "hint" berisi 1 kalimat petunjuk/kisi-kisi rahasia untuk membantu anak menjawab. Gunakan **teks tebal** di kalimat penting jika perlu.
         - Bahasa ramah anak, ceria.
-        - Penjelasan singkat & edukatif.`;
+        - Penjelasan singkat & edukatif. Gunakan **teks tebal** di bagian penting jika perlu.`;
 
         const parts = [{ text: promptText }];
         uploadedFiles.forEach(file => {
@@ -556,7 +585,7 @@
             }
           },
           systemInstruction: {
-            parts: [{ text: "Kamu adalah guru SD/MI Indonesia yang kreatif." }]
+            parts: [{ text: `Kamu adalah guru ${tingkatSekolahStr} Indonesia yang kreatif dan ceria.` }]
           }
         };
         
@@ -681,6 +710,7 @@
         if (!chatInput.trim() || !currentQ || !activeKey.trim()) return;
 
         const correctAnswerText = String(currentQ.options[currentQ.correctAnswerIndex]);
+        const tingkatSekolahStr = config.grade === 'TK / PAUD' ? 'TK / PAUD' : `SD/MI Kelas ${config.grade}`;
 
         const newMessages = [...chatMessages, { role: "user", text: chatInput }];
         setChatMessages(newMessages);
@@ -688,7 +718,7 @@
         setIsChatLoading(true);
 
         const promptText = `
-        Saya adalah anak SD/MI Kelas ${config.grade}.
+        Saya adalah anak ${tingkatSekolahStr}.
         Saya sedang mengerjakan soal Kuis ${config.subject}.
         Pertanyaannya: "${currentQ.question}"
         Jawaban benar: "${correctAnswerText}".
@@ -696,13 +726,13 @@
         
         Pertanyaan saya ke kamu: "${chatInput}"
 
-        Tolong jawab pertanyaan saya dengan bahasa yang SANGAT ramah, sederhana, mudah dimengerti anak kelas ${config.grade}, dan gunakan analogi atau perumpamaan yang dekat dengan dunia anak-anak. Jangan panjang-panjang. Berikan pujian kecil.
+        Tolong jawab pertanyaan saya dengan bahasa yang SANGAT ramah, sederhana, mudah dimengerti anak ${tingkatSekolahStr}, dan gunakan analogi atau perumpamaan yang dekat dengan dunia anak-anak. Jangan panjang-panjang. Berikan pujian kecil. Gunakan **teks tebal** di bagian kalimat penting jika perlu.
         `;
 
         const payload = {
           contents: [{ parts: [{ text: promptText }] }],
           systemInstruction: {
-            parts: [{ text: "Kamu adalah guru SD/MI Indonesia yang ramah, penyayang, dan pandai menjelaskan hal rumit menjadi sederhana untuk anak-anak." }]
+            parts: [{ text: `Kamu adalah guru ${tingkatSekolahStr} Indonesia yang ramah, penyayang, dan pandai menjelaskan hal rumit menjadi sederhana untuk anak-anak.` }]
           }
         };
 
@@ -779,7 +809,7 @@
             <div className={`w-full max-w-md md:max-w-2xl lg:max-w-5xl ${cardBg} border-4 rounded-[2rem] md:rounded-[2.5rem] p-5 md:p-8 lg:p-10 shadow-2xl relative overflow-hidden transition-colors duration-500`}>
               <div className="flex justify-center mb-4 md:mb-6">
                 <div className={`w-16 h-16 md:w-20 md:h-20 flex items-center justify-center rounded-2xl md:rounded-3xl shadow-[0_6px_0_0_rgba(0,0,0,0.2)] transform -rotate-6 ${isDark ? 'bg-indigo-600' : 'bg-gradient-to-b from-yellow-300 to-yellow-500'}`}>
-                  <i className="fas fa-gamepad text-3xl md:text-4xl text-white drop-shadow-md"></i>
+                  <i className="fas fa-rocket text-3xl md:text-4xl text-white drop-shadow-md"></i>
                 </div>
               </div>
               <h1 className={`text-3xl md:text-4xl lg:text-5xl font-black text-center mb-2 md:mb-3 tracking-tight ${textMain}`}>Kuis Petualangan</h1>
@@ -791,7 +821,7 @@
                     <div>
                       <label className={`block font-bold mb-1 md:mb-2 text-sm md:text-base ${textMain}`}>Kelas</label>
                       <select value={config.grade} onChange={(e) => setConfig({...config, grade: e.target.value})} className={`w-full p-3 rounded-xl font-bold outline-none border-2 shadow-sm text-sm md:text-base ${inputBg}`}>
-                        {grades.map(g => <option key={g} value={g}>Kelas {g} SD/MI</option>)}
+                        {grades.map(g => <option key={g} value={g}>{g === 'TK / PAUD' ? g : `Kelas ${g} SD/MI`}</option>)}
                       </select>
                     </div>
                     <div>
@@ -817,7 +847,7 @@
                     </div>
                   </div>
 
-                  <div className={`grid ${config.grade === '1' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'} gap-4 md:gap-5`}>
+                  <div className={`grid ${showVoiceFeature ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'} gap-4 md:gap-5`}>
                     <div>
                       <label className={`block font-bold mb-1 md:mb-2 text-sm md:text-base ${textMain}`}>Jumlah Soal</label>
                       <select value={config.questionCount} onChange={(e) => setConfig({...config, questionCount: parseInt(e.target.value)})} className={`w-full p-3 rounded-xl font-bold outline-none border-2 shadow-sm text-sm md:text-base ${inputBg}`}>
@@ -825,7 +855,7 @@
                       </select>
                     </div>
                     {/* Opsi Suara AI */}
-                    {config.grade === '1' && (
+                    {showVoiceFeature && (
                       <div>
                         <label className={`block font-bold mb-1 md:mb-2 text-sm md:text-base ${textMain}`}>Pilih Suara</label>
                         <select value={config.voice} onChange={(e) => setConfig({...config, voice: e.target.value})} className={`w-full p-3 rounded-xl font-bold outline-none border-2 shadow-sm text-sm md:text-base ${inputBg}`}>
@@ -961,7 +991,7 @@
               </div>
             </div>
 
-            {config.grade === '1' && (
+            {showVoiceFeature && (
                 <div className={`w-full max-w-4xl lg:max-w-5xl flex flex-col sm:flex-row items-center justify-between gap-3 p-3 md:p-4 mb-6 rounded-2xl border-2 shadow-sm transition-colors ${isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-white/80 border-gray-200 backdrop-blur-sm'}`}>
                    <div className="flex items-center gap-2 w-full sm:w-auto">
                      <span className={`text-xs md:text-sm font-bold opacity-70 ${textMain} flex items-center`}><i className="fas fa-robot mr-1"></i> Suara AI:</span>
@@ -994,7 +1024,8 @@
                 <span className={`px-2 md:px-3 py-1 font-bold rounded-md md:rounded-lg border text-[10px] md:text-xs ${isDark ? 'bg-indigo-900 text-indigo-200' : 'bg-indigo-100 text-indigo-700'}`}>📚 {String(config.subject.split(' (')[0])}</span>
               </div>
 
-              <h2 className={`text-xl md:text-2xl lg:text-3xl font-black mb-6 md:mb-8 leading-relaxed md:leading-snug ${textMain}`}>{String(currentQ.question)}</h2>
+              {/* FUNGSI FORMAT BOLD DITERAPKAN DI SOAL */}
+              <h2 className={`text-xl md:text-2xl lg:text-3xl font-black mb-6 md:mb-8 leading-relaxed md:leading-snug ${textMain}`}>{formatText(currentQ.question)}</h2>
 
               {/* FITUR PETUNJUK / KISI-KISI */}
               {!isAnswered && currentQ.hint && (
@@ -1007,7 +1038,7 @@
                   </button>
                   {showHint && (
                     <div className={`mt-4 p-5 rounded-2xl text-sm font-medium w-full md:w-3/4 text-center border-2 animate-fade-in ${isDark ? 'bg-amber-900/20 border-amber-700/50 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
-                      {String(currentQ.hint)}
+                      {formatText(currentQ.hint)}
                     </div>
                   )}
                 </div>
@@ -1025,7 +1056,8 @@
                     <button key={idx} disabled={isAnswered} onClick={() => handleOptionClick(idx)} className={`w-full text-left p-3 md:p-4 rounded-xl border-2 font-bold text-sm md:text-base lg:text-lg transition-all flex items-center justify-between shadow-[0_3px_0_0_rgba(0,0,0,0.1)] ${isAnswered ? '' : 'hover:bg-indigo-50 hover:border-indigo-300 active:translate-y-[2px] active:shadow-none'} ${btnClass}`}>
                       <span className="flex items-center gap-3 md:gap-4">
                         <span className={`w-7 h-7 md:w-8 md:h-8 flex items-center justify-center rounded-lg text-xs md:text-sm font-black shrink-0 ${isAnswered && idx === currentQ.correctAnswerIndex ? 'bg-white text-green-600' : 'bg-black/10'}`}>{['A','B','C','D'][idx]}</span>
-                        <span>{cleanOptionText(opt)}</span>
+                        {/* FUNGSI FORMAT BOLD DITERAPKAN DI OPSI JAWABAN */}
+                        <span>{formatText(cleanOptionText(opt))}</span>
                       </span>
                     </button>
                   );
@@ -1040,7 +1072,8 @@
                       {isCorrectAnswer ? <i className="fas fa-smile text-green-500 shrink-0 animate-bounce text-3xl md:text-4xl mt-1"></i> : <i className="fas fa-lightbulb text-orange-500 shrink-0 text-3xl md:text-4xl mt-1"></i>}
                       <div>
                         <h3 className={`font-black text-lg md:text-xl mb-1 ${isCorrectAnswer ? 'text-green-500' : 'text-orange-500'}`}>{String(feedbackMessage)}</h3>
-                        <p className={`font-medium text-xs md:text-sm ${textSub}`}>{String(currentQ.explanation)}</p>
+                        {/* FUNGSI FORMAT BOLD DITERAPKAN DI PENJELASAN */}
+                        <p className={`font-medium text-xs md:text-sm ${textSub}`}>{formatText(currentQ.explanation)}</p>
                       </div>
                     </div>
 
@@ -1109,12 +1142,13 @@
                                 <i className="fas fa-robot text-indigo-500 text-sm"></i>
                              </div>
                            )}
+                           {/* FUNGSI FORMAT BOLD DITERAPKAN DI PESAN CHAT AI */}
                            <div className={`px-4 py-3 rounded-2xl max-w-[85%] text-sm shadow-sm ${
                              msg.role === 'user' 
                                ? 'bg-indigo-500 text-white rounded-br-none' 
                                : isDark ? 'bg-slate-700 text-slate-200 rounded-bl-none' : 'bg-white text-gray-700 border border-gray-100 rounded-bl-none'
                            }`}>
-                              {String(msg.text)}
+                              {formatText(msg.text)}
                            </div>
                         </div>
                      ))}
@@ -1218,3 +1252,5 @@
   </script>
 </body>
 </html>
+
+
