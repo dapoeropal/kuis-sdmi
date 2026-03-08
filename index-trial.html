@@ -133,7 +133,7 @@
         level: 'Campuran',
         questionCount: 10,
         voice: 'Puck', 
-        visualMode: true, // Otomatis mode visual untuk default TK
+        visualMode: true, 
         specialNote: "" 
       });
 
@@ -184,7 +184,6 @@
       const isCorrectAnswer = isAnswered && currentQ && selectedOption === currentQ.correctAnswerIndex;
       const feedbackMessage = isAnswered ? feedbackMessages[currentQuestionIndex] : "";
       
-      // Menentukan apakah fitur suara AI (TTS) ditampilkan
       const showVoiceFeature = ['TK / PAUD', '1', '2', '3'].includes(config.grade);
 
       const levelColors = { 
@@ -251,6 +250,7 @@
         }
       }, [chatMessages, isChatOpen]);
 
+      // KETIKA PINDAH SOAL ATAU GANTI SUARA, PRELOAD ULANG
       useEffect(() => {
         if (gameState === 'playing' && questions.length > 0 && selectedOption === null && showVoiceFeature && !isChatOpen && config.voice !== 'local') {
             preloadCurrentQuestionAudio();
@@ -295,7 +295,6 @@
         return cleanedText;
       };
 
-      // FUNGSI FORMAT BOLD: Merubah **text** jadi tebal (bold) dan merapikan enter
       const formatText = (text) => {
         if (!text) return null;
         const str = String(text);
@@ -324,10 +323,9 @@
           setIsSpeaking(true);
           
           let cleanQ = String(currentQ.question).replace(/[_]/g, 'titik titik'); 
-          // Hapus bintang markdown sebelum dibaca oleh sistem
           cleanQ = cleanQ.replace(/\*\*/g, '');
 
-          const textToRead = `${cleanQ}. A. ${cleanOptionText(currentQ.options[0])}. B. ${cleanOptionText(currentQ.options[1])}. C. ${cleanOptionText(currentQ.options[2])}. D. ${cleanOptionText(currentQ.options[3])}.`;
+          const textToRead = `${cleanQ}. A. ${cleanOptionText(currentQ.options[0]).replace(/\*\*/g, '')}. B. ${cleanOptionText(currentQ.options[1]).replace(/\*\*/g, '')}. C. ${cleanOptionText(currentQ.options[2]).replace(/\*\*/g, '')}. D. ${cleanOptionText(currentQ.options[3]).replace(/\*\*/g, '')}.`;
           
           const utterance = new SpeechSynthesisUtterance(textToRead);
           utterance.lang = 'id-ID';
@@ -358,10 +356,10 @@
               let cleanQ = String(currentQ.question).replace(/[_]/g, 'titik titik').replace(/\*\*/g, ''); 
               
               let voiceActingPrompt = "";
-              if (config.voice === 'Fenrir') voiceActingPrompt = "Bacakan dengan suara paman beruang yang lucu, ramah, dan bersemangat dengan tempo normal: ";
-              else if (config.voice === 'Puck') voiceActingPrompt = "Bacakan dengan suara robot pintar yang ceria dan seru dengan tempo normal: ";
-              else if (config.voice === 'Kore') voiceActingPrompt = "Bacakan dengan suara kakak perempuan yang ceria, jelas, dan penuh semangat dengan tempo normal: ";
-              else voiceActingPrompt = "Bacakan dengan suara ibu peri yang lembut tapi ceria dan bersemangat dengan tempo normal: ";
+              if (config.voice === 'Fenrir') voiceActingPrompt = "Bacakan dengan suara paman beruang yang ramah: ";
+              else if (config.voice === 'Puck') voiceActingPrompt = "Bacakan dengan suara robot pintar yang ceria: ";
+              else if (config.voice === 'Kore') voiceActingPrompt = "Bacakan dengan suara kakak perempuan yang ceria: ";
+              else voiceActingPrompt = "Bacakan dengan suara ibu peri yang lembut: ";
 
               const textToRead = `${voiceActingPrompt} ${cleanQ}. A. ${cleanOptionText(currentQ.options[0]).replace(/\*\*/g, '')}. B. ${cleanOptionText(currentQ.options[1]).replace(/\*\*/g, '')}. C. ${cleanOptionText(currentQ.options[2]).replace(/\*\*/g, '')}. D. ${cleanOptionText(currentQ.options[3]).replace(/\*\*/g, '')}.`;
 
@@ -372,21 +370,32 @@
                   speechConfig: {
                     voiceConfig: { prebuiltVoiceConfig: { voiceName: config.voice } } 
                   }
-                },
-                model: "gemini-2.5-flash-preview-tts"
+                }
               };
 
-              const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${activeKey}`;
+              // PERBAIKAN UTAMA: Menggunakan model standar yang didukung semua API Key
+              let url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${activeKey}`;
               
-              const res = await fetch(url, {
+              let res = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
                 signal: signal
               });
 
+              // Jika model flash standar gagal, baru coba model preview-tts sebagai cadangan terakhir
               if (!res.ok) {
-                  throw new Error(`Gagal preload suara (Status: ${res.status}).`);
+                 url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${activeKey}`;
+                 res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    signal: signal
+                 });
+                 
+                 if (!res.ok) {
+                     throw new Error(`Gagal memuat suara AI (Status: ${res.status}). Menggunakan suara lokal.`);
+                 }
               }
 
               const data = await res.json();
@@ -411,7 +420,7 @@
               if (err.name === 'AbortError') {
                   console.log("Fetch suara dibatalkan.");
               } else {
-                  console.warn("Preload audio gagal (Mungkin karena mode GitHub Pages). Suara cadangan siap digunakan.", err);
+                  console.warn("Info: API Key tidak mendukung Suara AI Premium. Mengalihkan ke Suara HP.", err.message);
                   setIsTtsLoading(false);
               }
           }
@@ -434,6 +443,7 @@
                   fallbackTTS();
               });
           } else {
+              // Jika audio gagal di-load dari server, otomatis pakai suara HP
               fallbackTTS();
           }
       };
@@ -484,8 +494,8 @@
           return;
         }
         files.forEach(file => {
-          if (file.size > 5 * 1024 * 1024) {
-            alert(`Ukuran file ${file.name} terlalu besar! Maksimal 5MB.`);
+          if (file.size > 50 * 1024 * 1024) {
+            alert(`Ukuran file ${file.name} terlalu besar! Maksimal 50MB.`);
             return;
           }
           const isPdf = file.type === 'application/pdf';
@@ -548,7 +558,7 @@
         - Output WAJIB berupa JSON murni.
         - Format: { "questions": [{"question": "...", "options": ["...", "...", "...", "..."], "correctAnswerIndex": 0, "explanation": "...", "hint": "...", "level": "..."}] }
         - Sediakan tepat 4 Pilihan Jawaban (A, B, C, D) dalam array. Pilihan jawaban ORA entuk diwiwiti nganggo huruf "A.", "B.", "C.", "D.". Cukup tulisake teks jawabane wae.
-        - "hint" berisi 1 kalimat petunjuk/kisi-kisi rahasia untuk membantu anak menjawab. Gunakan **teks tebal** di kalimat penting jika perlu.
+        - "hint" berisi 1 kalimat petunjuk/kisi-kisi rahasia untuk membantu anak menjawab tanpa memberikan jawaban langsung. Gunakan **teks tebal** di kalimat penting jika perlu.
         - Bahasa ramah anak, ceria.
         - Penjelasan singkat & edukatif. Gunakan **teks tebal** di bagian penting jika perlu.`;
 
@@ -607,7 +617,10 @@
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));
                     if (res.status === 400 || res.status === 401 || res.status === 403) {
-                         throw new Error("Akses Ditolak (Error 401). Pastikan API Key diisi dengan benar jika main di luar Canvas, atau muat ulang (refresh) tab ini jika dimainkan di dalam Canvas.");
+                         if (err?.error?.message?.includes('too large') || err?.error?.message?.includes('exceeds')) {
+                             throw new Error("Materi PDF yang diunggah terlalu besar/tebal untuk dibaca sekaligus oleh AI. Mohon gunakan file PDF yang lebih kecil atau potong halamannya.");
+                         }
+                         throw new Error("Akses Ditolak (Error 401). Pastikan API Key diisi dengan benar.");
                     }
                     throw new Error(err?.error?.message || `Gagal menghubungi server (Status: ${res.status})`);
                 }
@@ -615,7 +628,7 @@
                 break; 
             } catch (e) {
                 lastErrorMsg = e.message;
-                if (lastErrorMsg.includes("Akses Ditolak") || lastErrorMsg.includes("is not found")) break;
+                if (lastErrorMsg.includes("Akses Ditolak") || lastErrorMsg.includes("terlalu besar/tebal") || lastErrorMsg.includes("is not found")) break;
                 
                 attempt++;
                 if (attempt < 5) {
@@ -854,7 +867,6 @@
                         {questionCounts.map(c => <option key={c} value={c}>{c} Soal</option>)}
                       </select>
                     </div>
-                    {/* Opsi Suara AI */}
                     {showVoiceFeature && (
                       <div>
                         <label className={`block font-bold mb-1 md:mb-2 text-sm md:text-base ${textMain}`}>Pilih Suara</label>
@@ -888,7 +900,7 @@
                     <label htmlFor="file-upload" className="cursor-pointer inline-flex items-center justify-center gap-2 bg-indigo-500 text-white font-bold text-sm md:text-base px-6 py-3 rounded-xl shadow-md hover:scale-105 transition-transform w-full sm:w-auto">
                       <i className="fas fa-upload text-lg"></i> Upload File / Foto Materi
                     </label>
-                    <p className={`text-[10px] md:text-xs mt-2 ${textSub}`}>Bisa tambah maks. 5 materi (Foto / PDF).</p>
+                    <p className={`text-[10px] md:text-xs mt-2 ${textSub}`}>Bisa tambah maks. 5 materi (Foto / PDF). Maks 50MB/file.</p>
                   </div>
 
                   {uploadedFiles.length > 0 && (
@@ -994,12 +1006,12 @@
             {showVoiceFeature && (
                 <div className={`w-full max-w-4xl lg:max-w-5xl flex flex-col sm:flex-row items-center justify-between gap-3 p-3 md:p-4 mb-6 rounded-2xl border-2 shadow-sm transition-colors ${isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-white/80 border-gray-200 backdrop-blur-sm'}`}>
                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                     <span className={`text-xs md:text-sm font-bold opacity-70 ${textMain} flex items-center`}><i className="fas fa-robot mr-1"></i> Suara AI:</span>
+                     <span className={`text-xs md:text-sm font-bold opacity-70 ${textMain} flex items-center`}><i className="fas fa-robot mr-1"></i> Suara:</span>
+                     
                      <select 
                        value={config.voice} 
                        onChange={(e) => setConfig({...config, voice: e.target.value})} 
-                       disabled={isAnswered || isSpeaking}
-                       className={`flex-1 sm:w-auto p-2 rounded-xl font-bold text-xs md:text-sm outline-none border-2 cursor-pointer shadow-inner ${inputBg} ${(isAnswered || isSpeaking) ? 'opacity-50' : ''}`}
+                       className={`flex-1 sm:w-auto p-2 rounded-xl font-bold text-xs md:text-sm outline-none border-2 cursor-pointer shadow-inner ${inputBg}`}
                      >
                        {voices.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                      </select>
@@ -1010,7 +1022,7 @@
                        <i className="fas fa-square"></i> Berhenti
                      </button>
                    ) : (
-                     <button onClick={playPreloadedAudio} disabled={isAnswered || (isTtsLoading && config.voice !== 'local')} className={`w-full sm:w-auto flex items-center justify-center gap-2 bg-sky-400 text-white px-6 py-2.5 rounded-xl font-black border-2 border-sky-500 shadow-[0_4px_0_0_rgba(2,132,199,1)] active:translate-y-[4px] active:shadow-none hover:bg-sky-300 transition-all text-sm md:text-base ${(isAnswered || (isTtsLoading && config.voice !== 'local')) ? 'opacity-50 cursor-not-allowed' : 'animate-bounce'}`}>
+                     <button onClick={playPreloadedAudio} disabled={isTtsLoading && config.voice !== 'local'} className={`w-full sm:w-auto flex items-center justify-center gap-2 bg-sky-400 text-white px-6 py-2.5 rounded-xl font-black border-2 border-sky-500 shadow-[0_4px_0_0_rgba(2,132,199,1)] active:translate-y-[4px] active:shadow-none hover:bg-sky-300 transition-all text-sm md:text-base ${(isTtsLoading && config.voice !== 'local') ? 'opacity-50 cursor-not-allowed' : 'animate-bounce'}`}>
                        {(isTtsLoading && config.voice !== 'local') ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-volume-up"></i>} 
                        {(isTtsLoading && config.voice !== 'local') ? "Menyiapkan Suara..." : "Bacakan Soal"}
                      </button>
@@ -1024,7 +1036,6 @@
                 <span className={`px-2 md:px-3 py-1 font-bold rounded-md md:rounded-lg border text-[10px] md:text-xs ${isDark ? 'bg-indigo-900 text-indigo-200' : 'bg-indigo-100 text-indigo-700'}`}>📚 {String(config.subject.split(' (')[0])}</span>
               </div>
 
-              {/* FUNGSI FORMAT BOLD DITERAPKAN DI SOAL */}
               <h2 className={`text-xl md:text-2xl lg:text-3xl font-black mb-6 md:mb-8 leading-relaxed md:leading-snug ${textMain}`}>{formatText(currentQ.question)}</h2>
 
               {/* FITUR PETUNJUK / KISI-KISI */}
@@ -1056,7 +1067,6 @@
                     <button key={idx} disabled={isAnswered} onClick={() => handleOptionClick(idx)} className={`w-full text-left p-3 md:p-4 rounded-xl border-2 font-bold text-sm md:text-base lg:text-lg transition-all flex items-center justify-between shadow-[0_3px_0_0_rgba(0,0,0,0.1)] ${isAnswered ? '' : 'hover:bg-indigo-50 hover:border-indigo-300 active:translate-y-[2px] active:shadow-none'} ${btnClass}`}>
                       <span className="flex items-center gap-3 md:gap-4">
                         <span className={`w-7 h-7 md:w-8 md:h-8 flex items-center justify-center rounded-lg text-xs md:text-sm font-black shrink-0 ${isAnswered && idx === currentQ.correctAnswerIndex ? 'bg-white text-green-600' : 'bg-black/10'}`}>{['A','B','C','D'][idx]}</span>
-                        {/* FUNGSI FORMAT BOLD DITERAPKAN DI OPSI JAWABAN */}
                         <span>{formatText(cleanOptionText(opt))}</span>
                       </span>
                     </button>
@@ -1072,7 +1082,6 @@
                       {isCorrectAnswer ? <i className="fas fa-smile text-green-500 shrink-0 animate-bounce text-3xl md:text-4xl mt-1"></i> : <i className="fas fa-lightbulb text-orange-500 shrink-0 text-3xl md:text-4xl mt-1"></i>}
                       <div>
                         <h3 className={`font-black text-lg md:text-xl mb-1 ${isCorrectAnswer ? 'text-green-500' : 'text-orange-500'}`}>{String(feedbackMessage)}</h3>
-                        {/* FUNGSI FORMAT BOLD DITERAPKAN DI PENJELASAN */}
                         <p className={`font-medium text-xs md:text-sm ${textSub}`}>{formatText(currentQ.explanation)}</p>
                       </div>
                     </div>
@@ -1142,7 +1151,6 @@
                                 <i className="fas fa-robot text-indigo-500 text-sm"></i>
                              </div>
                            )}
-                           {/* FUNGSI FORMAT BOLD DITERAPKAN DI PESAN CHAT AI */}
                            <div className={`px-4 py-3 rounded-2xl max-w-[85%] text-sm shadow-sm ${
                              msg.role === 'user' 
                                ? 'bg-indigo-500 text-white rounded-br-none' 
@@ -1238,7 +1246,6 @@
     root.render(<App />);
   </script>
 
-  <!-- SCRIPT UNTUK MENGAKTIFKAN SERVICE WORKER PWA -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
