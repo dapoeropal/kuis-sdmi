@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ms">
+<html lang="id">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -46,7 +46,6 @@
       animation: flyStraightUp 2.8s cubic-bezier(0.6, -0.28, 0.735, 0.045) infinite;
       animation-delay: 1.5s; opacity: 0.8;
     }
-    /* Animasi untuk modal chat */
     @keyframes slideUp {
       from { transform: translateY(100%); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
@@ -198,12 +197,16 @@
       const levels = ['Campuran', 'Mudah', 'Sedang', 'Sulit'];
       const questionCounts = [10, 15, 20, 25, 30, 40, 50];
       
-      // Menambahkan Label Rekomendasi Favorit Anak-anak
+      // OPSI SUARA DENGAN TAMBAHAN KARAKTER BARU YANG SERU
       const voices = [
         { id: 'Kore', name: '👧 Kakak Ceria (Premium) ⭐ Favorit' },
         { id: 'Puck', name: '🤖 Robot Pintar (Premium) ⭐ Favorit' },
+        { id: 'Leda', name: '📖 Bunda Pendongeng (Premium)' },
+        { id: 'Orus', name: '🤠 Kakak Petualang (Premium)' },
+        { id: 'Zephyr', name: '🧙‍♂️ Kakek Penyihir Bijak (Premium)' },
         { id: 'Aoede', name: '🧚‍♀️ Ibu Peri (Premium)' },
         { id: 'Fenrir', name: '🐻 Paman Beruang (Premium)' },
+        { id: 'Charon', name: '🦸‍♂️ Ksatria Pelindung (Premium)' },
         { id: 'local', name: '📱 Suara Robot HP (Tanpa Kuota)' }
       ];
       
@@ -252,6 +255,7 @@
         }
       }, [chatMessages, isChatOpen]);
 
+      // KETIKA PINDAH SOAL ATAU GANTI SUARA, PRELOAD ULANG
       useEffect(() => {
         if (gameState === 'playing' && questions.length > 0 && selectedOption === null && showVoiceFeature && !isChatOpen && config.voice !== 'local') {
             preloadCurrentQuestionAudio();
@@ -296,6 +300,7 @@
         return cleanedText;
       };
 
+      // FUNGSI FORMAT BOLD: Merubah **text** jadi tebal (bold) dan merapikan enter
       const formatText = (text) => {
         if (!text) return null;
         const str = String(text);
@@ -356,11 +361,19 @@
           try {
               let cleanQ = String(currentQ.question).replace(/[_]/g, 'titik titik').replace(/\*\*/g, ''); 
               
+              // INTONASI KHUSUS UNTUK MASING-MASING KARAKTER
               let voiceActingPrompt = "";
-              if (config.voice === 'Fenrir') voiceActingPrompt = "Bacakan dengan suara paman beruang yang ramah: ";
-              else if (config.voice === 'Puck') voiceActingPrompt = "Bacakan dengan suara robot pintar yang ceria: ";
-              else if (config.voice === 'Kore') voiceActingPrompt = "Bacakan dengan suara kakak perempuan yang ceria: ";
-              else voiceActingPrompt = "Bacakan dengan suara ibu peri yang lembut: ";
+              switch(config.voice) {
+                  case 'Fenrir': voiceActingPrompt = "Bacakan dengan suara paman beruang yang ramah dan lucu: "; break;
+                  case 'Puck': voiceActingPrompt = "Bacakan dengan suara robot pintar yang ceria dan seru: "; break;
+                  case 'Kore': voiceActingPrompt = "Bacakan dengan suara kakak perempuan yang ceria dan penuh semangat: "; break;
+                  case 'Aoede': voiceActingPrompt = "Bacakan dengan suara ibu peri yang lembut dan penuh keajaiban: "; break;
+                  case 'Leda': voiceActingPrompt = "Bacakan dengan intonasi suara pendongeng profesional yang seru, dramatis, ekspresif, dan memikat perhatian anak: "; break;
+                  case 'Orus': voiceActingPrompt = "Bacakan dengan suara pahlawan petualang yang sangat bersemangat, enerjik, dan pantang menyerah: "; break;
+                  case 'Zephyr': voiceActingPrompt = "Bacakan dengan suara kakek penyihir tua yang bijaksana, misterius, tenang, sabar, dan sangat ramah: "; break;
+                  case 'Charon': voiceActingPrompt = "Bacakan dengan suara ksatria yang tangguh, gagah berani, dan berwibawa: "; break;
+                  default: voiceActingPrompt = "Bacakan dengan suara yang ramah untuk anak-anak: ";
+              }
 
               const textToRead = `${voiceActingPrompt} ${cleanQ}. A. ${cleanOptionText(currentQ.options[0]).replace(/\*\*/g, '')}. B. ${cleanOptionText(currentQ.options[1]).replace(/\*\*/g, '')}. C. ${cleanOptionText(currentQ.options[2]).replace(/\*\*/g, '')}. D. ${cleanOptionText(currentQ.options[3]).replace(/\*\*/g, '')}.`;
 
@@ -375,9 +388,9 @@
                 model: "gemini-2.5-flash-preview-tts"
               };
 
-              const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${activeKey}`;
+              let url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${activeKey}`;
               
-              const res = await fetch(url, {
+              let res = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -385,7 +398,17 @@
               });
 
               if (!res.ok) {
-                  throw new Error(`Gagal preload suara (Status: ${res.status}).`);
+                 url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${activeKey}`;
+                 res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    signal: signal
+                 });
+                 
+                 if (!res.ok) {
+                     throw new Error(`Gagal memuat suara AI (Status: ${res.status}). Menggunakan suara lokal.`);
+                 }
               }
 
               const data = await res.json();
@@ -410,7 +433,7 @@
               if (err.name === 'AbortError') {
                   console.log("Fetch suara dibatalkan.");
               } else {
-                  console.warn("Preload audio gagal. Suara cadangan siap digunakan.", err);
+                  console.warn("Info: API Key tidak mendukung Suara AI Premium. Mengalihkan ke Suara HP.", err.message);
                   setIsTtsLoading(false);
               }
           }
@@ -863,7 +886,7 @@
                         <select value={config.voice} onChange={(e) => setConfig({...config, voice: e.target.value})} className={`w-full p-3 rounded-xl font-bold outline-none border-2 shadow-sm text-sm md:text-base ${inputBg}`}>
                           {voices.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                         </select>
-                        <p className={`text-[10px] md:text-xs mt-2 ${textSub}`}>💡 Tips: Anak-anak paling suka suara <b>Kakak Ceria</b> dan <b>Robot Pintar</b>!</p>
+                        <p className={`text-[10px] md:text-xs mt-2 ${textSub}`}>💡 Tips: Coba suara <b>Bunda Pendongeng</b> atau <b>Ksatria!</b></p>
                       </div>
                     )}
                   </div>
@@ -914,7 +937,7 @@
                     <label className={`flex items-center gap-1 md:gap-2 text-xs md:text-sm font-bold mb-1 md:mb-2 ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
                       <i className="fas fa-pen text-xs"></i> Pesan Khusus (Opsional)
                     </label>
-                    <textarea value={config.specialNote} onChange={(e) => setConfig({...config, specialNote: e.target.value})} placeholder="Contoh: Fokus buat soal dari halaman 1 sampai 3 ya..." className={`w-full p-2 md:p-3 rounded-lg md:rounded-xl text-xs md:text-sm outline-none border transition-all resize-none h-16 md:h-20 ${isDark ? 'bg-slate-800 border-slate-600 text-white focus:border-indigo-500' : 'bg-gray-50 border-gray-200 text-gray-700 focus:border-indigo-400 focus:bg-white'}`} />
+                    <textarea value={config.specialNote} onChange={(e) => setConfig({...config, specialNote: e.target.value})} placeholder="Contoh: Fokus buat soal tentang dongeng si kancil ya..." className={`w-full p-2 md:p-3 rounded-lg md:rounded-xl text-xs md:text-sm outline-none border transition-all resize-none h-16 md:h-20 ${isDark ? 'bg-slate-800 border-slate-600 text-white focus:border-indigo-500' : 'bg-gray-50 border-gray-200 text-gray-700 focus:border-indigo-400 focus:bg-white'}`} />
                   </div>
                 </div>
               </div>
@@ -1241,7 +1264,6 @@
     root.render(<App />);
   </script>
 
-  <!-- SCRIPT UNTUK MENGAKTIFKAN SERVICE WORKER PWA -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
