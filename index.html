@@ -46,6 +46,7 @@
       animation: flyStraightUp 2.8s cubic-bezier(0.6, -0.28, 0.735, 0.045) infinite;
       animation-delay: 1.5s; opacity: 0.8;
     }
+    /* Animasi untuk modal chat */
     @keyframes slideUp {
       from { transform: translateY(100%); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
@@ -132,7 +133,7 @@
         subject: 'Mengenal Angka & Berhitung',
         level: 'Campuran',
         questionCount: 10,
-        voice: 'Kore', // Setel default ke Kakak Ceria karena paling disukai
+        voice: 'Kore', 
         visualMode: true, 
         specialNote: "" 
       });
@@ -153,6 +154,9 @@
       const [isTtsLoading, setIsTtsLoading] = useState(false);
       const [preloadedAudioUrl, setPreloadedAudioUrl] = useState(null);
       
+      // State untuk animasi tombol petunjuk saat loading suara
+      const [isHintAudioLoading, setIsHintAudioLoading] = useState(false);
+
       const [isChatOpen, setIsChatOpen] = useState(false);
       const [chatMessages, setChatMessages] = useState([]);
       const [chatInput, setChatInput] = useState("");
@@ -197,10 +201,9 @@
       const levels = ['Campuran', 'Mudah', 'Sedang', 'Sulit'];
       const questionCounts = [10, 15, 20, 25, 30, 40, 50];
       
-      // OPSI SUARA DENGAN TAMBAHAN KARAKTER BARU YANG SERU
       const voices = [
-        { id: 'Kore', name: '👧 Kakak Ceria (Premium) ⭐ Favorit' },
-        { id: 'Puck', name: '🤖 Robot Pintar (Premium) ⭐ Favorit' },
+        { id: 'Kore', name: '👧 Kakak Ceria (Premium) ⭐' },
+        { id: 'Puck', name: '🤖 Robot Pintar (Premium) ⭐' },
         { id: 'Leda', name: '📖 Bunda Pendongeng (Premium)' },
         { id: 'Orus', name: '🤠 Kakak Petualang (Premium)' },
         { id: 'Zephyr', name: '🧙‍♂️ Kakek Penyihir Bijak (Premium)' },
@@ -258,10 +261,10 @@
       // KETIKA PINDAH SOAL ATAU GANTI SUARA, PRELOAD ULANG
       useEffect(() => {
         if (gameState === 'playing' && questions.length > 0 && selectedOption === null && showVoiceFeature && !isChatOpen && config.voice !== 'local') {
-            preloadCurrentQuestionAudio();
+            preloadCurrentQuestionAudio(false);
         }
         stopSpeaking();
-      }, [currentQuestionIndex, gameState, questions, config.voice, showVoiceFeature, isChatOpen]);
+      }, [currentQuestionIndex, gameState, config.voice, showVoiceFeature, isChatOpen]);
 
       useEffect(() => {
           const audioEl = audioRef.current;
@@ -284,6 +287,7 @@
         setIsChatOpen(false);
         setChatMessages([]);
         setShowHint(false);
+        setIsHintAudioLoading(false);
       };
 
       const stopSpeaking = () => {
@@ -291,6 +295,7 @@
         audioRef.current.currentTime = 0;
         if (window.speechSynthesis) window.speechSynthesis.cancel(); 
         setIsSpeaking(false);
+        setIsHintAudioLoading(false);
       };
 
       const cleanOptionText = (text) => {
@@ -300,7 +305,6 @@
         return cleanedText;
       };
 
-      // FUNGSI FORMAT BOLD: Merubah **text** jadi tebal (bold) dan merapikan enter
       const formatText = (text) => {
         if (!text) return null;
         const str = String(text);
@@ -342,8 +346,112 @@
           if (window.speechSynthesis) window.speechSynthesis.speak(utterance);
       };
 
-      const preloadCurrentQuestionAudio = async () => {
-          if (!currentQ || !activeKey.trim() || config.voice === 'local') return; 
+      const readHintFallback = (text) => {
+          if (window.speechSynthesis) window.speechSynthesis.cancel(); 
+          setIsSpeaking(true);
+          let cleanText = String(text).replace(/[_]/g, 'titik titik').replace(/\*\*/g, '');
+          const utterance = new SpeechSynthesisUtterance(cleanText);
+          utterance.lang = 'id-ID';
+          utterance.rate = 0.9;
+          utterance.onend = () => setIsSpeaking(false);
+          utterance.onerror = () => setIsSpeaking(false);
+          if (window.speechSynthesis) window.speechSynthesis.speak(utterance);
+      };
+
+      // FUNGSI BARU: Untuk membaca text Petunjuk (Hint)
+      const playHintAudio = async (hintText) => {
+          if (!hintText) return;
+          
+          stopSpeaking(); 
+          setIsHintAudioLoading(true);
+
+          if (config.voice === 'local' || !activeKey.trim()) {
+              readHintFallback(hintText);
+              setIsHintAudioLoading(false);
+              return;
+          }
+
+          try {
+              let cleanHint = String(hintText).replace(/[_]/g, 'titik titik').replace(/\*\*/g, ''); 
+              
+              let voiceActingPrompt = "";
+              switch(config.voice) {
+                  case 'Fenrir': voiceActingPrompt = "Bacakan petunjuk ini dengan suara paman beruang yang ramah: "; break;
+                  case 'Puck': voiceActingPrompt = "Bacakan petunjuk ini dengan suara robot pintar yang ceria: "; break;
+                  case 'Kore': voiceActingPrompt = "Bacakan petunjuk ini dengan suara kakak perempuan yang ceria: "; break;
+                  case 'Aoede': voiceActingPrompt = "Bacakan petunjuk ini dengan suara ibu peri yang lembut: "; break;
+                  case 'Leda': voiceActingPrompt = "Bacakan petunjuk ini dengan intonasi suara pendongeng yang ekspresif: "; break;
+                  case 'Orus': voiceActingPrompt = "Bacakan petunjuk ini dengan suara pahlawan petualang: "; break;
+                  case 'Zephyr': voiceActingPrompt = "Bacakan petunjuk ini dengan suara kakek penyihir tua: "; break;
+                  case 'Charon': voiceActingPrompt = "Bacakan petunjuk ini dengan suara ksatria: "; break;
+                  default: voiceActingPrompt = "Bacakan petunjuk ini untuk anak-anak: ";
+              }
+
+              const payload = {
+                contents: [{ parts: [{ text: `${voiceActingPrompt} ${cleanHint}` }] }],
+                generationConfig: {
+                  responseModalities: ["AUDIO"],
+                  speechConfig: {
+                    voiceConfig: { prebuiltVoiceConfig: { voiceName: config.voice } } 
+                  }
+                },
+                model: "gemini-2.5-flash-preview-tts"
+              };
+
+              let url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${activeKey}`;
+              
+              let res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+              });
+
+              if (!res.ok) {
+                 url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${activeKey}`;
+                 res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                 });
+                 
+                 if (!res.ok) throw new Error("Gagal load TTS Hint");
+              }
+
+              const data = await res.json();
+              const audioData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+
+              if (audioData && audioData.data) {
+                const sampleRateMatch = audioData.mimeType.match(/rate=(\d+)/);
+                const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 24000;
+                const pcmBuffer = base64ToArrayBuffer(audioData.data);
+                const wavBuffer = pcmToWav(pcmBuffer, sampleRate);
+                const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+                const audioUrl = URL.createObjectURL(blob);
+
+                audioRef.current.src = audioUrl;
+                audioRef.current.play().then(() => {
+                    setIsSpeaking(true);
+                }).catch(e => {
+                    readHintFallback(hintText);
+                }).finally(() => {
+                    setIsHintAudioLoading(false);
+                });
+              } else {
+                  readHintFallback(hintText);
+                  setIsHintAudioLoading(false);
+              }
+          } catch (err) {
+              console.warn("Gagal fetch audio hint, fallback ke local", err);
+              readHintFallback(hintText);
+              setIsHintAudioLoading(false);
+          }
+      };
+
+      const preloadCurrentQuestionAudio = async (forcePlay = false) => {
+          if (!currentQ || !activeKey.trim() || config.voice === 'local') {
+              if (forcePlay && config.voice === 'local') fallbackTTS();
+              return;
+          }
           
           setIsTtsLoading(true);
           
@@ -361,17 +469,16 @@
           try {
               let cleanQ = String(currentQ.question).replace(/[_]/g, 'titik titik').replace(/\*\*/g, ''); 
               
-              // INTONASI KHUSUS UNTUK MASING-MASING KARAKTER
               let voiceActingPrompt = "";
               switch(config.voice) {
                   case 'Fenrir': voiceActingPrompt = "Bacakan dengan suara paman beruang yang ramah dan lucu: "; break;
                   case 'Puck': voiceActingPrompt = "Bacakan dengan suara robot pintar yang ceria dan seru: "; break;
-                  case 'Kore': voiceActingPrompt = "Bacakan dengan suara kakak perempuan yang ceria dan penuh semangat: "; break;
-                  case 'Aoede': voiceActingPrompt = "Bacakan dengan suara ibu peri yang lembut dan penuh keajaiban: "; break;
-                  case 'Leda': voiceActingPrompt = "Bacakan dengan intonasi suara pendongeng profesional yang seru, dramatis, ekspresif, dan memikat perhatian anak: "; break;
-                  case 'Orus': voiceActingPrompt = "Bacakan dengan suara pahlawan petualang yang sangat bersemangat, enerjik, dan pantang menyerah: "; break;
-                  case 'Zephyr': voiceActingPrompt = "Bacakan dengan suara kakek penyihir tua yang bijaksana, misterius, tenang, sabar, dan sangat ramah: "; break;
-                  case 'Charon': voiceActingPrompt = "Bacakan dengan suara ksatria yang tangguh, gagah berani, dan berwibawa: "; break;
+                  case 'Kore': voiceActingPrompt = "Bacakan dengan suara kakak perempuan yang ceria dan semangat: "; break;
+                  case 'Aoede': voiceActingPrompt = "Bacakan dengan suara ibu peri yang lembut dan ajaib: "; break;
+                  case 'Leda': voiceActingPrompt = "Bacakan dengan intonasi suara pendongeng profesional yang seru dan memikat: "; break;
+                  case 'Orus': voiceActingPrompt = "Bacakan dengan suara pahlawan petualang yang enerjik dan gagah: "; break;
+                  case 'Zephyr': voiceActingPrompt = "Bacakan dengan suara kakek penyihir tua yang bijaksana dan misterius: "; break;
+                  case 'Charon': voiceActingPrompt = "Bacakan dengan suara ksatria yang tangguh dan berwibawa: "; break;
                   default: voiceActingPrompt = "Bacakan dengan suara yang ramah untuk anak-anak: ";
               }
 
@@ -426,20 +533,31 @@
 
                 setPreloadedAudioUrl(audioUrl);
                 setIsTtsLoading(false);
+                
+                if (forcePlay) {
+                    audioRef.current.src = audioUrl;
+                    audioRef.current.play().then(() => {
+                        setIsSpeaking(true);
+                    }).catch(e => {
+                        console.error("Gagal memutar audio, fallback ke suara HP:", e);
+                        fallbackTTS();
+                    });
+                }
               } else {
                  throw new Error("Data suara kosong dari server.");
               }
           } catch (err) {
               if (err.name === 'AbortError') {
-                  console.log("Fetch suara dibatalkan.");
+                  // Dibatalkan sengaja
               } else {
-                  console.warn("Info: API Key tidak mendukung Suara AI Premium. Mengalihkan ke Suara HP.", err.message);
+                  console.warn("Preload audio AI gagal. Memutar suara cadangan (Robot HP).", err);
                   setIsTtsLoading(false);
+                  if (forcePlay) fallbackTTS();
               }
           }
       };
 
-      const playPreloadedAudio = () => {
+      const playAudioHandler = () => {
           if (isSpeaking) return;
           
           if (config.voice === 'local') {
@@ -452,11 +570,12 @@
               audioRef.current.play().then(() => {
                   setIsSpeaking(true);
               }).catch(e => {
-                  console.error("Gagal memutar audio, mengalihkan ke suara cadangan:", e);
+                  console.error("Gagal memutar audio:", e);
                   fallbackTTS();
               });
           } else {
-              fallbackTTS();
+              // Jika audio belum siap/gagal load, paksa fetch ulang & langsung putar
+              preloadCurrentQuestionAudio(true);
           }
       };
 
@@ -715,6 +834,7 @@
           setIsChatOpen(false);
           setChatMessages([]);
           setShowHint(false); 
+          setIsHintAudioLoading(false);
         } else {
           setGameState('result');
           setIsChatOpen(false);
@@ -728,6 +848,7 @@
           setIsChatOpen(false);
           setChatMessages([]);
           setShowHint(false);
+          setIsHintAudioLoading(false);
         }
       };
 
@@ -1021,11 +1142,11 @@
                 <div className={`w-full max-w-4xl lg:max-w-5xl flex flex-col sm:flex-row items-center justify-between gap-3 p-3 md:p-4 mb-6 rounded-2xl border-2 shadow-sm transition-colors ${isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-white/80 border-gray-200 backdrop-blur-sm'}`}>
                    <div className="flex items-center gap-2 w-full sm:w-auto">
                      <span className={`text-xs md:text-sm font-bold opacity-70 ${textMain} flex items-center`}><i className="fas fa-robot mr-1"></i> Suara AI:</span>
-                     
                      <select 
                        value={config.voice} 
                        onChange={(e) => setConfig({...config, voice: e.target.value})} 
-                       className={`flex-1 sm:w-auto p-2 rounded-xl font-bold text-xs md:text-sm outline-none border-2 cursor-pointer shadow-inner ${inputBg}`}
+                       disabled={isSpeaking}
+                       className={`flex-1 sm:w-auto p-2 rounded-xl font-bold text-xs md:text-sm outline-none border-2 cursor-pointer shadow-inner ${inputBg} ${isSpeaking ? 'opacity-50' : ''}`}
                      >
                        {voices.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                      </select>
@@ -1036,7 +1157,7 @@
                        <i className="fas fa-square"></i> Berhenti
                      </button>
                    ) : (
-                     <button onClick={playPreloadedAudio} disabled={isTtsLoading && config.voice !== 'local'} className={`w-full sm:w-auto flex items-center justify-center gap-2 bg-sky-400 text-white px-6 py-2.5 rounded-xl font-black border-2 border-sky-500 shadow-[0_4px_0_0_rgba(2,132,199,1)] active:translate-y-[4px] active:shadow-none hover:bg-sky-300 transition-all text-sm md:text-base ${(isTtsLoading && config.voice !== 'local') ? 'opacity-50 cursor-not-allowed' : 'animate-bounce'}`}>
+                     <button onClick={playAudioHandler} disabled={isTtsLoading && config.voice !== 'local'} className={`w-full sm:w-auto flex items-center justify-center gap-2 bg-sky-400 text-white px-6 py-2.5 rounded-xl font-black border-2 border-sky-500 shadow-[0_4px_0_0_rgba(2,132,199,1)] active:translate-y-[4px] active:shadow-none hover:bg-sky-300 transition-all text-sm md:text-base ${(isTtsLoading && config.voice !== 'local') ? 'opacity-50 cursor-not-allowed' : 'animate-bounce'}`}>
                        {(isTtsLoading && config.voice !== 'local') ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-volume-up"></i>} 
                        {(isTtsLoading && config.voice !== 'local') ? "Menyiapkan Suara..." : "Bacakan Soal"}
                      </button>
@@ -1053,14 +1174,29 @@
               {/* FUNGSI FORMAT BOLD DITERAPKAN DI SOAL */}
               <h2 className={`text-xl md:text-2xl lg:text-3xl font-black mb-6 md:mb-8 leading-relaxed md:leading-snug ${textMain}`}>{formatText(currentQ.question)}</h2>
 
-              {/* FITUR PETUNJUK / KISI-KISI */}
+              {/* FITUR PETUNJUK / KISI-KISI YANG LANGSUNG BERSUARA */}
               {!isAnswered && currentQ.hint && (
                 <div className="flex flex-col items-center mb-8">
                   <button 
-                    onClick={() => setShowHint(!showHint)}
+                    onClick={() => {
+                        const nextState = !showHint;
+                        setShowHint(nextState);
+                        // Jika dibuka dan level TK/Kelas 1, langsung bacakan petunjuknya
+                        if (nextState && ['TK / PAUD', '1'].includes(config.grade)) {
+                            playHintAudio(currentQ.hint);
+                        } else if (!nextState) {
+                            stopSpeaking(); // Matikan suara jika ditutup
+                        }
+                    }}
+                    disabled={isHintAudioLoading}
                     className={`px-5 py-2.5 rounded-full font-bold text-sm flex items-center gap-2 transition-all shadow-sm active:scale-95 ${showHint ? (isDark ? 'bg-amber-900/50 text-amber-400 border border-amber-700' : 'bg-amber-100 text-amber-700 border border-amber-300') : (isDark ? 'bg-slate-700 text-slate-300 border border-slate-600 hover:bg-slate-600' : 'bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200')}`}
                   >
-                    <i className="fas fa-lightbulb text-amber-500"></i> {showHint ? "Tutup Petunjuk" : "Butuh Petunjuk?"}
+                    {isHintAudioLoading ? (
+                        <i className="fas fa-circle-notch fa-spin text-amber-500"></i>
+                    ) : (
+                        <i className="fas fa-lightbulb text-amber-500"></i>
+                    )}
+                    {showHint ? "Tutup Petunjuk" : "Butuh Petunjuk?"}
                   </button>
                   {showHint && (
                     <div className={`mt-4 p-5 rounded-2xl text-sm font-medium w-full md:w-3/4 text-center border-2 animate-fade-in ${isDark ? 'bg-amber-900/20 border-amber-700/50 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
@@ -1082,7 +1218,6 @@
                     <button key={idx} disabled={isAnswered} onClick={() => handleOptionClick(idx)} className={`w-full text-left p-3 md:p-4 rounded-xl border-2 font-bold text-sm md:text-base lg:text-lg transition-all flex items-center justify-between shadow-[0_3px_0_0_rgba(0,0,0,0.1)] ${isAnswered ? '' : 'hover:bg-indigo-50 hover:border-indigo-300 active:translate-y-[2px] active:shadow-none'} ${btnClass}`}>
                       <span className="flex items-center gap-3 md:gap-4">
                         <span className={`w-7 h-7 md:w-8 md:h-8 flex items-center justify-center rounded-lg text-xs md:text-sm font-black shrink-0 ${isAnswered && idx === currentQ.correctAnswerIndex ? 'bg-white text-green-600' : 'bg-black/10'}`}>{['A','B','C','D'][idx]}</span>
-                        {/* FUNGSI FORMAT BOLD DITERAPKAN DI OPSI JAWABAN */}
                         <span>{formatText(cleanOptionText(opt))}</span>
                       </span>
                     </button>
@@ -1098,7 +1233,6 @@
                       {isCorrectAnswer ? <i className="fas fa-smile text-green-500 shrink-0 animate-bounce text-3xl md:text-4xl mt-1"></i> : <i className="fas fa-lightbulb text-orange-500 shrink-0 text-3xl md:text-4xl mt-1"></i>}
                       <div>
                         <h3 className={`font-black text-lg md:text-xl mb-1 ${isCorrectAnswer ? 'text-green-500' : 'text-orange-500'}`}>{String(feedbackMessage)}</h3>
-                        {/* FUNGSI FORMAT BOLD DITERAPKAN DI PENJELASAN */}
                         <p className={`font-medium text-xs md:text-sm ${textSub}`}>{formatText(currentQ.explanation)}</p>
                       </div>
                     </div>
@@ -1264,6 +1398,7 @@
     root.render(<App />);
   </script>
 
+  <!-- SCRIPT UNTUK MENGAKTIFKAN SERVICE WORKER PWA -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
