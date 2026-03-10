@@ -188,7 +188,7 @@
       const isCorrectAnswer = isAnswered && currentQ && selectedOption === currentQ.correctAnswerIndex;
       const feedbackMessage = isAnswered ? feedbackMessages[currentQuestionIndex] : "";
       
-      const showVoiceFeature = ['TK / PAUD', '1', '2', '3'].includes(config.grade);
+      const showVoiceFeature = ['TK / PAUD', '1', '2'].includes(config.grade);
 
       const levelColors = { 
         'Mudah': isDark ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-700', 
